@@ -711,6 +711,151 @@ def methode_3(file_path, t_lines_original, lowcut=15, highcut=20, order=4, quat_
 
 
 
+
+def methode_3_simplified(times, freeacc_x, freeacc_y, freeacc_z, quat_w, quat_x, quat_y, quat_z, 
+                         lowcut=15, highcut=20, order=4, quat_threshold=0.0010):
+    """
+    Détecte les rebonds sur la raquette de tennis de table à partir des quaternions filtrés.
+    Cette version n'utilise pas de fichier CSV ni de données annotées.
+    Elle se base uniquement sur les données passées en argument et ne calcule plus de métriques de précision.
+
+    Parameters:
+    - times (array): tableau des temps (en secondes).
+    - freeacc_x, freeacc_y, freeacc_z (array): Accélérations libres en x, y, z.
+    - quat_w, quat_x, quat_y, quat_z (array): Quaternions mesurés.
+    - lowcut (float): Fréquence basse du filtre passe-bande.
+    - highcut (float): Fréquence haute du filtre passe-bande.
+    - order (int): Ordre du filtre Butterworth.
+    - quat_threshold (float): Seuil pour détecter les rebonds à partir des quaternions filtrés.
+
+    Returns:
+    - detected_rebound_times (list of float): Liste des temps de rebonds détectés.
+    """
+    # Vérifications de base
+    if len(times) == 0:
+        return []
+
+    dt = np.median(np.diff(times))
+    fs = 1.0 / dt
+    nyquist = 0.5 * fs
+    if lowcut >= highcut:
+        raise ValueError("lowcut doit être inférieur à highcut.")
+    if lowcut <= 0 or highcut >= nyquist:
+        raise ValueError(f"0 < lowcut < highcut < Nyquist ({nyquist:.2f} Hz).")
+
+    # Définir le filtre passe-bande
+    low = lowcut / nyquist
+    high = highcut / nyquist
+    b, a = butter(order, [low, high], btype='band')
+
+    # Filtrer les accélérations
+    freeacc_x_filt = filtfilt(b, a, freeacc_x)
+    freeacc_y_filt = filtfilt(b, a, freeacc_y)
+    freeacc_z_filt = filtfilt(b, a, freeacc_z)
+
+    # Vérifier que les quaternions sont présents
+    if quat_w is None or quat_x is None or quat_y is None or quat_z is None:
+        raise ValueError("Les données quaternion doivent être fournies.")
+
+    # Filtrer les quaternions
+    quat_w_filt = filtfilt(b, a, quat_w)
+    quat_x_filt = filtfilt(b, a, quat_x)
+    quat_y_filt = filtfilt(b, a, quat_y)
+    quat_z_filt = filtfilt(b, a, quat_z)
+
+    # Calcul de la valeur max absolue parmi les quaternions filtrés à chaque instant
+    max_abs_quat = np.max(np.abs(np.vstack([quat_w_filt, quat_x_filt, quat_y_filt, quat_z_filt]).T), axis=1)
+    condition = max_abs_quat > quat_threshold
+
+    n_samples_0_05s = int(np.ceil(0.05 / dt))
+
+    detected_rebounds = []
+    i = 0
+    len_condition = len(condition)
+
+    while i < len_condition:
+        if condition[i]:
+            # Début intervalle
+            interval_start = i
+            j = i + 1
+            while j < len_condition:
+                if not condition[j]:
+                    # Vérifier la condition fausse pendant 0.05s
+                    if j + n_samples_0_05s <= len_condition:
+                        if not condition[j:j + n_samples_0_05s].any():
+                            interval_end = j
+                            break
+                        else:
+                            j += 1
+                    else:
+                        interval_end = len_condition - 1
+                        break
+                else:
+                    j += 1
+            else:
+                interval_end = len_condition - 1
+
+            # Intervalle détecté, on va trouver un temps représentatif du rebond
+            # Utilisation du passage par zéro d'Acc_X comme dans la méthode originale
+            interval_data_indices = range(interval_start, interval_end)
+            time_interval_start = times[interval_start]
+
+            window_size = int(np.ceil(0.1 / dt))
+            window_start = max(0, interval_start - window_size)
+            window_end = min(len(times), interval_end + window_size)
+
+            acc_x_window = freeacc_x[window_start:window_end]
+
+            positive_crossings_indices_x = np.where((acc_x_window[:-1] < 0) & (acc_x_window[1:] >= 0))[0]
+            if len(positive_crossings_indices_x) > 0:
+                positive_crossings_indices_x += window_start
+                times_positive_crossings_x = times[positive_crossings_indices_x]
+
+                # Trouver le passage par zéro le plus proche de time_interval_start
+                delta_t_x = times_positive_crossings_x - time_interval_start
+                adjusted_time_x = times_positive_crossings_x[np.abs(delta_t_x).argmin()]
+            else:
+                adjusted_time_x = time_interval_start
+
+            time_difference_x = abs(adjusted_time_x - time_interval_start)
+
+            if time_difference_x > 0.3:
+                # Chercher passage par zéro sur Z
+                acc_z_window = freeacc_z[window_start:window_end]
+                positive_crossings_indices_z = np.where((acc_z_window[:-1] < 0) & (acc_z_window[1:] >= 0))[0]
+                if len(positive_crossings_indices_z) > 0:
+                    positive_crossings_indices_z += window_start
+                    times_positive_crossings_z = times[positive_crossings_indices_z]
+
+                    delta_t_z = times_positive_crossings_z - time_interval_start
+                    adjusted_time_z = times_positive_crossings_z[np.abs(delta_t_z).argmin()]
+                    adjusted_time = adjusted_time_z
+                else:
+                    adjusted_time = adjusted_time_x
+            else:
+                adjusted_time = adjusted_time_x
+
+            detected_rebounds.append(adjusted_time)
+            i = interval_end + n_samples_0_05s
+        else:
+            i += 1
+
+    # Supprimer les rebonds trop proches
+    min_interval = 0.1
+    filtered_rebounds = []
+    for t in sorted(detected_rebounds):
+        if not filtered_rebounds or t - filtered_rebounds[-1] >= min_interval:
+            filtered_rebounds.append(t)
+
+    return filtered_rebounds
+
+
+#----------------------------------------------------------------------------------------------------------------------
+
+
+
+
+
 def detec_rebond_table(file_path, t_lines_original, window_size=5, delta_t=0.05, threshold=0.5, min_interval=0.5):
     """
     Détecte les rebonds de la balle sur la table en utilisant les données d'accélération.

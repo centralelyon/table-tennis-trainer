@@ -10,13 +10,20 @@ import threading
 import tkinter as tk
 import cv2
 from collections import deque
-
-# Import de la fonction methode_3
-from fonctions_de_detection import methode_3
+from fonctions_de_detection import methode_3_simplified
+import matplotlib
+matplotlib.use("TkAgg")  # Backend TK
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import matplotlib.animation as animation
+from scipy.signal import butter, sosfilt
 
 #######################
 # Configuration générale
 #######################
+
+if sys.platform.startswith('win'):
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 # Capteurs BLE
 sensors_config = {
@@ -25,15 +32,16 @@ sensors_config = {
     "D4:22:CD:00:9E:2F": {"name": "Raquette B", "type": "raquette"}
 }
 
-short_payload_characteristic_uuid = "15172004-4947-11e9-8646-d663bd873d93"
 measurement_characteristic_uuid = "15172001-4947-11e9-8646-d663bd873d93"
+complete_quat_characteristic_uuid = "15172003-4947-11e9-8646-d663bd873d93"
 
+# On n'utilise que Complete Quaternion
 payload_modes = {
-    "Free acceleration": [6, b"\x06"],
+    "Complete Quaternion": [3, b"\x03"]
 }
 
 pygame.mixer.init()
-sound = None  # Ajuster si nécessaire
+sound = None
 
 root = tk.Tk()
 root.title("Interface Tennis de Table")
@@ -42,8 +50,7 @@ playerA_sets = tk.IntVar(value=0)
 playerB_sets = tk.IntVar(value=0)
 playerA_points = tk.IntVar(value=0)
 playerB_points = tk.IntVar(value=0)
-
-server_var = tk.StringVar(value="A")  # "A" ou "B"
+server_var = tk.StringVar(value="A")
 threshold = 0.40
 threshold_var = tk.DoubleVar(value=threshold)
 
@@ -127,15 +134,17 @@ def update_threshold(*args):
         threshold_var.set(threshold)
 threshold_var.trace_add("write", update_threshold)
 
+delta_t = 0.05
+min_interval = 0.5
+data_lock = threading.Lock()
+
+# Initialisation des listes pour chaque capteur
 for addr in sensors_config.keys():
     sensors_config[addr].update({
         "times": [],
-        "xs": [],
-        "ys": [],
-        "zs": [],
-        "deriv_x": [],
-        "deriv_y": [],
-        "deriv_z": [],
+        "xs": [], "ys": [], "zs": [],
+        "quat_w": [], "quat_x": [], "quat_y": [], "quat_z": [],
+        "deriv_x": [], "deriv_y": [], "deriv_z": [],
         "last_bounce_time": 0,
         "window_size": 5,
         "acc_x_filtered_prev": 0,
@@ -143,9 +152,24 @@ for addr in sensors_config.keys():
         "acc_z_filtered_prev": 0
     })
 
-delta_t = 0.05
-min_interval = 0.5
-data_lock = threading.Lock()
+# Filtrage complet quaternion : On utilise le même filtrage que le second script
+lowcut = 20.0
+highcut = 25.0
+order = 4
+fs = 100.0
+def butter_bandpass(lowcut, highcut, fs, order=4):
+    from scipy.signal import butter
+    nyq = 0.5 * fs
+    low = lowcut / nyq
+    high = highcut / nyq
+    sos = butter(order, [low, high], btype='band', output='sos')
+    return sos
+
+sos = butter_bandpass(lowcut, highcut, fs, order)
+
+# On va juste lire les données sans filtrage quaternion ici, ou les filtrer plus tard si nécessaire.
+# Pour simplifier, gardons la logique du premier script, on ne fait pas de filtrage quaternion supplémentaire
+# On se contente de stocker les données quaternion. Le script d'origine ne filtrait pas les quaternions.
 
 def add_bounce_event(source, timestamp):
     event_str = f"{source} - {time.strftime('%H:%M:%S', time.localtime(timestamp))}"
@@ -157,12 +181,8 @@ def update_bounces_display():
     for bounce in last_bounces:
         bounces_list.insert(tk.END, bounce)
 
-########################
-# Méthode de détection
-########################
-
 def detect_bounces_table(sensor, deriv_magnitude, current_time):
-    # Méthode actuelle pour la table
+    # Même logique qu'avant
     if deriv_magnitude > threshold and (current_time - sensor["last_bounce_time"]) >= min_interval:
         sensor["last_bounce_time"] = current_time
         add_bounce_event(sensor["name"], current_time)
@@ -170,135 +190,127 @@ def detect_bounces_table(sensor, deriv_magnitude, current_time):
             sound.play()
 
 def detect_bounces_raquette(sensor):
-    # Méthode 3 : On considère que vous avez un fichier CSV contenant les données de la raquette
-    # et une liste t_lines_original (temps annotés).
-    # Ce code est purement indicatif. En pratique, vous devrez :
-    # - Soit enregistrer les données dans un CSV
-    # - Soit adapter methode_3 pour accepter des données en mémoire.
-
-    file_path = "donnees_raquette.csv"  # Chemin vers votre fichier CSV pour la raquette
-    t_lines_original = []  # À définir selon vos données réelles
-
-    # Appel à la méthode_3
-    detected_rebound_times, precision_metrics = methode_3(file_path, t_lines_original)
-
-    # Parcourir les rebonds détectés et ajouter les événements
-    for (_, rebound_time) in detected_rebound_times:
-        # Ici, rebound_time est en secondes depuis le début du fichier.
-        # Si vous souhaitez aligner ce temps avec l'horloge réelle, vous devrez ajuster.
-        # Pour l'exemple, on considère rebound_time comme un timestamp absolu (c'est faux).
-        # Vous devrez adapter le code pour convertir rebound_time (issu du CSV)
-        # en un temps absolu ou en un temps cohérent avec le moment courant.
-
-        # Par exemple, si rebound_time est relatif (depuis le début de l'enregistrement),
-        # et que l'enregistrement a commencé à current_time_start, il faudra faire :
-        # event_timestamp = current_time_start + rebound_time
-        # Ici on va simplement utiliser le temps actuel, fictivement.
-        current_time = time.time()
-        add_bounce_event(sensor["name"], current_time)
-
-        if sound:
-            sound.play()
-
-########################
-# Fonction notification BLE
-########################
-
-def encode_free_accel_bytes_to_string(bytes_):
-    data_segments = np.dtype(
-        [
-            ("timestamp", np.uint32),
-            ("x", np.float32),
-            ("y", np.float32),
-            ("z", np.float32),
-            ("zero_padding", np.uint32),
-        ]
-    )
-    formatted_data = np.frombuffer(bytes_, dtype=data_segments)
-    return formatted_data
-
-def handle_notification(sender, data, ble_address):
-    sensor = sensors_config[ble_address]
-    formatted_data = encode_free_accel_bytes_to_string(data)
-    acceleration_x = formatted_data["x"][0]
-    acceleration_y = formatted_data["y"][0]
-    acceleration_z = formatted_data["z"][0]
-
-    current_time = time.time()
-
     with data_lock:
-        sensor["times"].append(current_time)
-        sensor["xs"].append(acceleration_x)
-        sensor["ys"].append(acceleration_y)
-        sensor["zs"].append(acceleration_z)
+        times_arr = np.array(sensor["times"])
+        freeacc_x = np.array(sensor["xs"])
+        freeacc_y = np.array(sensor["ys"])
+        freeacc_z = np.array(sensor["zs"])
+        qw = np.array(sensor["quat_w"])
+        qx = np.array(sensor["quat_x"])
+        qy = np.array(sensor["quat_y"])
+        qz = np.array(sensor["quat_z"])
 
-        w = sensor["window_size"]
-        xs = sensor["xs"]
-        ys = sensor["ys"]
-        zs = sensor["zs"]
-        if len(xs) >= w:
-            acc_x_filtered = np.mean(xs[-w:])
-            acc_y_filtered = np.mean(ys[-w:])
-            acc_z_filtered = np.mean(zs[-w:])
-        else:
-            acc_x_filtered = xs[-1]
-            acc_y_filtered = ys[-1]
-            acc_z_filtered = zs[-1]
+    detected_rebounds = methode_3_simplified(times_arr, freeacc_x, freeacc_y, freeacc_z, qw, qx, qy, qz)
+    for rebound_time in detected_rebounds:
+        if rebound_time - sensor["last_bounce_time"] >= min_interval:
+            sensor["last_bounce_time"] = rebound_time
+            add_bounce_event(sensor["name"], rebound_time)
+            if sound:
+                sound.play()
 
-        if len(xs) == 1:
+def parse_complete_quaternion_data(data_bytes):
+    if len(data_bytes) != 32:
+        return None
+    data_format = np.dtype([
+        ('timestamp', np.uint32),
+        ('quat_w', np.float32),
+        ('quat_x', np.float32),
+        ('quat_y', np.float32),
+        ('quat_z', np.float32),
+        ('accel_x', np.float32),
+        ('accel_y', np.float32),
+        ('accel_z', np.float32),
+    ])
+    data = np.frombuffer(data_bytes, dtype=data_format)
+    return data
+
+def handle_notification_factory(ble_address):
+    def handle_notification(sender, data):
+        sensor = sensors_config[ble_address]
+        parsed = parse_complete_quaternion_data(data)
+        if parsed is None:
+            return
+
+        accel_x = parsed['accel_x'][0]
+        accel_y = parsed['accel_y'][0]
+        accel_z = parsed['accel_z'][0]
+        qw = parsed['quat_w'][0]
+        qx = parsed['quat_x'][0]
+        qy = parsed['quat_y'][0]
+        qz = parsed['quat_z'][0]
+
+        current_time = time.time()
+
+        with data_lock:
+            sensor["times"].append(current_time)
+            sensor["xs"].append(accel_x)
+            sensor["ys"].append(accel_y)
+            sensor["zs"].append(accel_z)
+            sensor["quat_w"].append(qw)
+            sensor["quat_x"].append(qx)
+            sensor["quat_y"].append(qy)
+            sensor["quat_z"].append(qz)
+
+            w = sensor["window_size"]
+            xs = sensor["xs"]
+            ys = sensor["ys"]
+            zs = sensor["zs"]
+
+            if len(xs) >= w:
+                acc_x_filtered = np.mean(xs[-w:])
+                acc_y_filtered = np.mean(ys[-w:])
+                acc_z_filtered = np.mean(zs[-w:])
+            else:
+                acc_x_filtered = xs[-1]
+                acc_y_filtered = ys[-1]
+                acc_z_filtered = zs[-1]
+
+            if len(xs) == 1:
+                sensor["acc_x_filtered_prev"] = acc_x_filtered
+                sensor["acc_y_filtered_prev"] = acc_y_filtered
+                sensor["acc_z_filtered_prev"] = acc_z_filtered
+
+            dt_ = delta_t
+            deriv_x_value = (acc_x_filtered - sensor["acc_x_filtered_prev"]) / dt_
+            deriv_y_value = (acc_y_filtered - sensor["acc_y_filtered_prev"]) / dt_
+            deriv_z_value = (acc_z_filtered - sensor["acc_z_filtered_prev"]) / dt_
+
+            sensor["deriv_x"].append(deriv_x_value)
+            sensor["deriv_y"].append(deriv_y_value)
+            sensor["deriv_z"].append(deriv_z_value)
+
             sensor["acc_x_filtered_prev"] = acc_x_filtered
             sensor["acc_y_filtered_prev"] = acc_y_filtered
             sensor["acc_z_filtered_prev"] = acc_z_filtered
 
-        dt_ = delta_t
-        deriv_x_value = (acc_x_filtered - sensor["acc_x_filtered_prev"]) / dt_
-        deriv_y_value = (acc_y_filtered - sensor["acc_y_filtered_prev"]) / dt_
-        deriv_z_value = (acc_z_filtered - sensor["acc_z_filtered_prev"]) / dt_
+            max_length = 1000
+            if len(sensor["times"]) > max_length:
+                for k in ["times","xs","ys","zs","quat_w","quat_x","quat_y","quat_z","deriv_x","deriv_y","deriv_z"]:
+                    sensor[k] = sensor[k][-max_length:]
 
-        sensor["deriv_x"].append(deriv_x_value)
-        sensor["deriv_y"].append(deriv_y_value)
-        sensor["deriv_z"].append(deriv_z_value)
+            deriv_magnitude = np.sqrt(deriv_x_value**2 + deriv_y_value**2 + deriv_z_value**2)
 
-        sensor["acc_x_filtered_prev"] = acc_x_filtered
-        sensor["acc_y_filtered_prev"] = acc_y_filtered
-        sensor["acc_z_filtered_prev"] = acc_z_filtered
-
-        max_length = 1000
-        if len(sensor["times"]) > max_length:
-            for k in ["times","xs","ys","zs","deriv_x","deriv_y","deriv_z"]:
-                sensor[k] = sensor[k][-max_length:]
-
-        deriv_magnitude = np.sqrt(deriv_x_value**2 + deriv_y_value**2 + deriv_z_value**2)
-
-        # Selon le type de capteur, appliquer une méthode différente
+        # Détection de rebond
         if sensor["type"] == "table":
-            # Méthode existante (dérivée, threshold)
             detect_bounces_table(sensor, deriv_magnitude, current_time)
         else:
-            # Capteur de raquette : utiliser methode_3
-            # Vous pouvez décider d'appeler cette détection à intervalle régulier,
-            # par exemple toutes les X secondes, ou une fois que vous avez suffisamment
-            # de données. Ici, on l'appelle de manière illustrative.
-            #
-            # Dans un cas réel, vous feriez par exemple :
-            # if len(sensor["xs"]) > 1000:
-            #     detect_bounces_raquette(sensor)
-            #
-            # Pour l'exemple, on appelle directement la fonction
-            detect_bounces_raquette(sensor)
+            if len(sensor["xs"]) > 100:
+                detect_bounces_raquette(sensor)
 
-###################
-# Capture Vidéo
-###################
-if cam1_index is not None and cam1_index >= 0:
-    cap1 = cv2.VideoCapture(cam1_index)
-else:
-    cap1 = None
+    return handle_notification
 
-if cam2_index is not None and cam2_index >= 0:
-    cap2 = cv2.VideoCapture(cam2_index)
-else:
-    cap2 = None
+def try_open_camera(index):
+    if index is not None and index >= 0:
+        cap = cv2.VideoCapture(index)
+        if cap.isOpened():
+            return cap
+        else:
+            cap.release()
+            return None
+    return None
+
+cap1 = try_open_camera(cam1_index)
+cap2 = try_open_camera(cam2_index)
 
 def update_video_frames():
     if cap1 and cap1.isOpened():
@@ -313,7 +325,7 @@ def update_video_frames():
 
     if ret1:
         frame1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2RGB)
-        img1 = cv2.resize(frame1, (320, 240)) 
+        img1 = cv2.resize(frame1, (320, 240))
     else:
         img1 = np.zeros((240,320,3), dtype=np.uint8)
 
@@ -333,19 +345,15 @@ def update_video_frames():
 
     root.after(50, update_video_frames)
 
-########################
-# Thread BLE
-########################
-
-async def run_device(ble_address):
+async def connect_device(ble_address):
     device = await BleakScanner.find_device_by_address(ble_address, timeout=20.0)
     if device is None:
         print(f"Périphérique {ble_address} non trouvé.")
         return
     async with BleakClient(device) as client:
-        await client.start_notify(short_payload_characteristic_uuid,
-                                  lambda sender, data: handle_notification(sender, data, ble_address))
-        payload_mode_values = payload_modes["Free acceleration"]
+        handler = handle_notification_factory(ble_address)
+        await client.start_notify(complete_quat_characteristic_uuid, handler)
+        payload_mode_values = payload_modes["Complete Quaternion"]
         payload_mode = payload_mode_values[1]
         measurement_default = b"\x01"
         start_measurement = b"\x01"
@@ -357,17 +365,19 @@ async def run_device(ble_address):
         except asyncio.CancelledError:
             pass
         finally:
-            await client.stop_notify(short_payload_characteristic_uuid)
+            await client.stop_notify(complete_quat_characteristic_uuid)
 
-def run_ble_client(ble_address):
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(run_device(ble_address))
+async def main_ble():
+    tasks = [connect_device(addr) for addr in sensors_config.keys()]
+    await asyncio.gather(*tasks)
 
-for addr in sensors_config.keys():
-    t = threading.Thread(target=run_ble_client, args=(addr,))
-    t.daemon = True
-    t.start()
+def run_ble_client():
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(main_ble())
+    except Exception as e:
+        print(f"Error in run_ble_client: {e}")
 
 def on_closing():
     if cap1:
@@ -379,4 +389,84 @@ def on_closing():
 root.protocol("WM_DELETE_WINDOW", on_closing)
 
 update_video_frames()
+
+show_graph_var = tk.BooleanVar(value=False)
+
+frame_graph_options = tk.Frame(root)
+frame_graph_options.pack(side=tk.BOTTOM, fill=tk.X)
+tk.Checkbutton(frame_graph_options, text="Afficher accélérations (10s)", variable=show_graph_var, command=lambda: toggle_graph()).pack(side=tk.LEFT, padx=5, pady=5)
+
+frame_graph = tk.Frame(root)
+fig = Figure(figsize=(6,4))
+ax_table = fig.add_subplot(3,1,1)
+ax_raqA = fig.add_subplot(3,1,2)
+ax_raqB = fig.add_subplot(3,1,3)
+
+canvas_graph = FigureCanvasTkAgg(fig, master=frame_graph)
+
+ani = None
+
+def animate(i):
+    current_time = time.time()
+    time_window = 10.0
+
+    ax_table.clear()
+    ax_raqA.clear()
+    ax_raqB.clear()
+
+    def plot_sensor(ax, sensor_addr):
+        with data_lock:
+            times = sensors_config[sensor_addr]["times"]
+            xs = sensors_config[sensor_addr]["xs"]
+            ys = sensors_config[sensor_addr]["ys"]
+            zs = sensors_config[sensor_addr]["zs"]
+
+        indices = [i for i,t in enumerate(times) if t >= current_time - time_window]
+        if len(indices) > 0:
+            times_rel = [times[i] - (current_time - time_window) for i in indices]
+            xs_plot = [xs[i] for i in indices]
+            ys_plot = [ys[i] for i in indices]
+            zs_plot = [zs[i] for i in indices]
+
+            ax.plot(times_rel, xs_plot, label="Acc_X", color="red")
+            ax.plot(times_rel, ys_plot, label="Acc_Y", color="green")
+            ax.plot(times_rel, zs_plot, label="Acc_Z", color="blue")
+
+            ax.set_ylabel("g")
+            ax.grid(True)
+            ax.legend()
+            ax.set_xlim(0, time_window)
+        else:
+            ax.text(0.5,0.5,"Aucune donnée", ha='center', va='center')
+
+    plot_sensor(ax_table, "D4:22:CD:00:A0:FD")
+    ax_table.set_title("Table (10s)")
+
+    plot_sensor(ax_raqA, "D4:22:CD:00:9B:E6")
+    ax_raqA.set_title("Raquette A (10s)")
+
+    plot_sensor(ax_raqB, "D4:22:CD:00:9E:2F")
+    ax_raqB.set_title("Raquette B (10s)")
+    ax_raqB.set_xlabel("Temps (s)")
+
+    fig.tight_layout()
+
+def toggle_graph():
+    global ani
+    if show_graph_var.get():
+        frame_graph.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
+        canvas_graph.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+        ani = animation.FuncAnimation(fig, animate, interval=100, blit=False)
+    else:
+        if ani is not None:
+            ani.event_source.stop()
+            ani._stop()
+            ani = None
+        canvas_graph.get_tk_widget().pack_forget()
+        frame_graph.pack_forget()
+
+ble_thread = threading.Thread(target=run_ble_client)
+ble_thread.daemon = True
+ble_thread.start()
+
 root.mainloop()

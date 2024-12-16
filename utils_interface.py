@@ -249,6 +249,17 @@ def appliquer_pose_estimation(frame):
     return annotated_frame
 
 
+def automate(sequence):
+    taille_sequence = len(sequence)
+    sequence_ref = "ARRB"
+    if sequence == sequence_ref:
+        print("sequence valide")
+    elif sequence == sequence_ref[0:taille_sequence]:
+        print("Sequence incomplète")
+    else:
+        print("Sequence incorrect")
+    
+
 if __name__ == "__main__":
     #liste des rebonds: [18,50,82]
     afficher_detection_orange()

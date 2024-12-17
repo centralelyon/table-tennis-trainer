@@ -152,7 +152,6 @@ for addr in sensors_config.keys():
         "acc_z_filtered_prev": 0
     })
 
-# Filtrage complet quaternion : On utilise le même filtrage que le second script
 lowcut = 20.0
 highcut = 25.0
 order = 4
@@ -167,10 +166,6 @@ def butter_bandpass(lowcut, highcut, fs, order=4):
 
 sos = butter_bandpass(lowcut, highcut, fs, order)
 
-# On va juste lire les données sans filtrage quaternion ici, ou les filtrer plus tard si nécessaire.
-# Pour simplifier, gardons la logique du premier script, on ne fait pas de filtrage quaternion supplémentaire
-# On se contente de stocker les données quaternion. Le script d'origine ne filtrait pas les quaternions.
-
 def add_bounce_event(source, timestamp):
     event_str = f"{source} - {time.strftime('%H:%M:%S', time.localtime(timestamp))}"
     last_bounces.append(event_str)
@@ -182,7 +177,6 @@ def update_bounces_display():
         bounces_list.insert(tk.END, bounce)
 
 def detect_bounces_table(sensor, deriv_magnitude, current_time):
-    # Même logique qu'avant
     if deriv_magnitude > threshold and (current_time - sensor["last_bounce_time"]) >= min_interval:
         sensor["last_bounce_time"] = current_time
         add_bounce_event(sensor["name"], current_time)
@@ -208,8 +202,9 @@ def detect_bounces_raquette(sensor):
             if sound:
                 sound.play()
 
+# MODIFICATION ICI : Ajuster le parsing des données pour 40 octets
 def parse_complete_quaternion_data(data_bytes):
-    if len(data_bytes) != 32:
+    if len(data_bytes) != 40:
         return None
     data_format = np.dtype([
         ('timestamp', np.uint32),
@@ -220,6 +215,8 @@ def parse_complete_quaternion_data(data_bytes):
         ('accel_x', np.float32),
         ('accel_y', np.float32),
         ('accel_z', np.float32),
+        ('dq_w', np.float32),
+        ('dq_x', np.float32)
     ])
     data = np.frombuffer(data_bytes, dtype=data_format)
     return data
@@ -238,6 +235,9 @@ def handle_notification_factory(ble_address):
         qx = parsed['quat_x'][0]
         qy = parsed['quat_y'][0]
         qz = parsed['quat_z'][0]
+        # On ignore dq_w et dq_x
+        # dq_w = parsed['dq_w'][0]
+        # dq_x = parsed['dq_x'][0]
 
         current_time = time.time()
 

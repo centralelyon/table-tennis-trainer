@@ -18,6 +18,9 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.animation as animation
 from scipy.signal import butter, sosfilt
 
+sys.path.append('./')
+from utils_interface import *  # Pour calculer_liste_webcams_dispo
+
 #######################
 # Configuration générale
 #######################
@@ -83,6 +86,7 @@ label_cam1.pack(side=tk.LEFT, padx=5, pady=5)
 label_cam2 = tk.Label(frame_videos)
 label_cam2.pack(side=tk.LEFT, padx=5, pady=5)
 
+# Caméras par défaut
 cam1_index = 0
 cam2_index = 1
 
@@ -138,7 +142,6 @@ delta_t = 0.05
 min_interval = 0.5
 data_lock = threading.Lock()
 
-# Initialisation des listes pour chaque capteur
 for addr in sensors_config.keys():
     sensors_config[addr].update({
         "times": [],
@@ -202,7 +205,6 @@ def detect_bounces_raquette(sensor):
             if sound:
                 sound.play()
 
-# MODIFICATION ICI : Ajuster le parsing des données pour 40 octets
 def parse_complete_quaternion_data(data_bytes):
     if len(data_bytes) != 40:
         return None
@@ -235,9 +237,6 @@ def handle_notification_factory(ble_address):
         qx = parsed['quat_x'][0]
         qy = parsed['quat_y'][0]
         qz = parsed['quat_z'][0]
-        # On ignore dq_w et dq_x
-        # dq_w = parsed['dq_w'][0]
-        # dq_x = parsed['dq_x'][0]
 
         current_time = time.time()
 
@@ -309,8 +308,22 @@ def try_open_camera(index):
             return None
     return None
 
+# AJOUT : Récupérer la liste des caméras disponibles
+arr = calculer_liste_webcams_dispo()  # par ex. [0,1,2,...]
+
 cap1 = try_open_camera(cam1_index)
 cap2 = try_open_camera(cam2_index)
+
+def update_selected_cameras(*args):
+    global cap1, cap2
+    new_cam1_index = cam1_var.get()
+    new_cam2_index = cam2_var.get()
+    if cap1:
+        cap1.release()
+    if cap2:
+        cap2.release()
+    cap1 = try_open_camera(new_cam1_index)
+    cap2 = try_open_camera(new_cam2_index)
 
 def update_video_frames():
     if cap1 and cap1.isOpened():
@@ -464,6 +477,23 @@ def toggle_graph():
             ani = None
         canvas_graph.get_tk_widget().pack_forget()
         frame_graph.pack_forget()
+
+# AJOUT : Ajout des menus déroulants pour le choix des caméras
+cam1_var = tk.IntVar(value=cam1_index)
+cam2_var = tk.IntVar(value=cam2_index)
+
+cam1_menu = tk.OptionMenu(frame_controls, cam1_var, *arr)
+cam1_menu.pack(side=tk.LEFT, padx=5, pady=5)
+cam2_menu = tk.OptionMenu(frame_controls, cam2_var, *arr)
+cam2_menu.pack(side=tk.LEFT, padx=5, pady=5)
+
+cam1_var.trace_add("write", update_selected_cameras)
+cam2_var.trace_add("write", update_selected_cameras)
+
+# AJOUT BOUTONS : Ajouter 3 boutons pour rajouter manuellement des rebonds
+tk.Button(frame_controls, text="Rebond Raquette A", command=lambda: add_bounce_event("Raquette A", time.time())).pack(side=tk.LEFT, padx=5, pady=5)
+tk.Button(frame_controls, text="Rebond Raquette B", command=lambda: add_bounce_event("Raquette B", time.time())).pack(side=tk.LEFT, padx=5, pady=5)
+tk.Button(frame_controls, text="Rebond Table", command=lambda: add_bounce_event("Table", time.time())).pack(side=tk.LEFT, padx=5, pady=5)
 
 ble_thread = threading.Thread(target=run_ble_client)
 ble_thread.daemon = True

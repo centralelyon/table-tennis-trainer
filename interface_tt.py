@@ -45,6 +45,7 @@ payload_modes = {
 
 pygame.mixer.init()
 sound = None
+sequence = ""
 
 root = tk.Tk()
 root.title("Interface Tennis de Table")
@@ -140,6 +141,7 @@ threshold_var.trace_add("write", update_threshold)
 
 delta_t = 0.05
 min_interval = 0.5
+faire_yolo = False
 data_lock = threading.Lock()
 
 for addr in sensors_config.keys():
@@ -170,12 +172,28 @@ def butter_bandpass(lowcut, highcut, fs, order=4):
 sos = butter_bandpass(lowcut, highcut, fs, order)
 
 def add_bounce_event(source, timestamp):
+    global sequence,frame1,frame2
+    if source == "Raquette A":
+        sequence += "A"
+    elif source == "Raquette B":
+        sequence += "B"
+    if source == "Table":
+        sequence += "R"
+    
+    #frame1_pose = appliquer_pose_estimation(frame1)
+    #frame2_pose = appliquer_pose_estimation(frame2)
+    #image = Image.fromarray(frame1_pose)  # Si l'image est en niveaux de gris
+    #image.save("C:/Users/ReViVD/Documents/GitHub/table-tennis-trainer/image_frame1.png")
+    #image = Image.fromarray(frame2_pose)  # Si l'image est en niveaux de gris
+    #image.save("C:/Users/ReViVD/Documents/GitHub/table-tennis-trainer/image_frame2.png")
     event_str = f"{source} - {time.strftime('%H:%M:%S', time.localtime(timestamp))}"
     last_bounces.append(event_str)
     update_bounces_display()
 
 def update_bounces_display():
+    global sequence
     bounces_list.delete(0, tk.END)
+    automate(sequence)
     for bounce in last_bounces:
         bounces_list.insert(tk.END, bounce)
 
@@ -314,6 +332,11 @@ arr = calculer_liste_webcams_dispo()  # par ex. [0,1,2,...]
 cap1 = try_open_camera(cam1_index)
 cap2 = try_open_camera(cam2_index)
 
+frame1 = []
+frame2 = []
+
+appliquer_pose_estimation(np.zeros((100,100,3), dtype=np.uint8))
+
 def update_selected_cameras(*args):
     global cap1, cap2
     new_cam1_index = cam1_var.get()
@@ -326,6 +349,7 @@ def update_selected_cameras(*args):
     cap2 = try_open_camera(new_cam2_index)
 
 def update_video_frames():
+    global frame1,frame2,faire_yolo
     if cap1 and cap1.isOpened():
         ret1, frame1 = cap1.read()
     else:
@@ -338,12 +362,20 @@ def update_video_frames():
 
     if ret1:
         frame1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2RGB)
+        if faire_yolo:
+            results1 = appliquer_pose_estimation(frame1)
+            print(results1.keypoints.xy)
+            frame1 = results1.plot()
         img1 = cv2.resize(frame1, (320, 240))
     else:
         img1 = np.zeros((240,320,3), dtype=np.uint8)
 
     if ret2:
         frame2 = cv2.cvtColor(frame2, cv2.COLOR_BGR2RGB)
+        if faire_yolo:
+            results2 = appliquer_pose_estimation(frame2)
+            print(results2.keypoints.xy)
+            frame2 = results2.plot()
         img2 = cv2.resize(frame2, (320, 240))
     else:
         img2 = np.zeros((240,320,3), dtype=np.uint8)
@@ -408,6 +440,8 @@ show_graph_var = tk.BooleanVar(value=False)
 frame_graph_options = tk.Frame(root)
 frame_graph_options.pack(side=tk.BOTTOM, fill=tk.X)
 tk.Checkbutton(frame_graph_options, text="Afficher accélérations (10s)", variable=show_graph_var, command=lambda: toggle_graph()).pack(side=tk.LEFT, padx=5, pady=5)
+tk.Checkbutton(frame_graph_options, text="Faire Yolo", variable=show_graph_var, command=lambda: faire_yolo_modif_value()).pack(side=tk.LEFT, padx=5, pady=5)
+
 
 frame_graph = tk.Frame(root)
 fig = Figure(figsize=(6,4))
@@ -477,6 +511,10 @@ def toggle_graph():
             ani = None
         canvas_graph.get_tk_widget().pack_forget()
         frame_graph.pack_forget()
+
+def faire_yolo_modif_value():
+    global faire_yolo
+    faire_yolo = (faire_yolo == False)
 
 # AJOUT : Ajout des menus déroulants pour le choix des caméras
 cam1_var = tk.IntVar(value=cam1_index)

@@ -243,11 +243,35 @@ def update_automate_after_event(source):
 
 ###############################
 
-# Déclarez une liste globale pour stocker les événements
-events = []  # contiendra des tuples (time, source)
-def add_bounce_event(source, timestamp):
-    global sequence, frame1, frame2, results1, results2, faire_yolo
+# Variables globales
+events = []
+last_event_time = None
+point_timeout_ms = 5000  # 5 secondes
+point_ended = False  # Pour savoir si le point est terminé
 
+def end_point():
+    
+    global point_ended
+    point_ended = True
+    # Vous pouvez afficher un message ou mettre la machine à états dans un état particulier
+    last_bounces.append("Fin du point (pas d'événement depuis 3s)")
+    update_bounces_display()
+
+def check_point_timeout(last_time_checked):
+    global last_event_time, point_ended
+    # Cette fonction est appelée après 3s du dernier événement
+    # On vérifie si last_event_time n'a pas changé
+    if last_event_time == last_time_checked and not point_ended:
+        # Aucun nouvel événement depuis 3s, fin du point
+        end_point()
+
+def add_bounce_event(source, timestamp):
+    global sequence, frame1, frame2, results1, results2, faire_yolo, last_event_time, point_ended
+
+    if point_ended:
+        # Si le point est déjà terminé, on ignore les événements
+        return
+    
     # AJOUT AUTOMATE : Vérification de l'événement
     if not event_allowed(source):
         # Événement non attendu, on l'ignore
@@ -280,9 +304,24 @@ def add_bounce_event(source, timestamp):
     event_str = f"{source} - {time.strftime('%H:%M:%S', time.localtime(timestamp))}"
     last_bounces.append(event_str)
     update_bounces_display()
-
     events.append((timestamp, source))
 
+    # Mettre à jour last_event_time et programmer le check timeout
+    last_event_time = timestamp
+    root.after(point_timeout_ms, lambda: check_point_timeout(timestamp))
+
+def start_new_point():
+    global events, sequence, point_ended, last_racket, current_state, current_server, last_event_time
+    # Réinitialiser l'automate
+    reset_automate()
+    sequence = ""
+    events.clear()
+    point_ended = False
+    last_event_time = None
+    # Si vous voulez réinitialiser l'affichage des rebonds
+    last_bounces.clear()
+    update_bounces_display()
+    # Si besoin, réinitialiser le serveur, etc.
 def update_bounces_display():
     global sequence
     bounces_list.delete(0, tk.END)
@@ -642,6 +681,7 @@ cam2_var.trace_add("write", update_selected_cameras)
 tk.Button(frame_controls, text="Rebond Raquette A", command=lambda: add_bounce_event("Raquette A", time.time())).pack(side=tk.LEFT, padx=5, pady=5)
 tk.Button(frame_controls, text="Rebond Raquette B", command=lambda: add_bounce_event("Raquette B", time.time())).pack(side=tk.LEFT, padx=5, pady=5)
 tk.Button(frame_controls, text="Rebond Table", command=lambda: add_bounce_event("Table", time.time())).pack(side=tk.LEFT, padx=5, pady=5)
+tk.Button(frame_controls, text="Nouveau point", command=start_new_point).pack(side=tk.LEFT, padx=5, pady=5)
 
 ble_thread = threading.Thread(target=run_ble_client)
 ble_thread.daemon = True

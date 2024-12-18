@@ -250,7 +250,7 @@ def appliquer_pose_estimation(frame):
     return results[0]
 
 
-def automate(sequence):
+def check_sequence(sequence):
     taille_sequence = len(sequence)
     sequence_ref = "ARRB"
     if sequence == sequence_ref:
@@ -282,7 +282,6 @@ def coup_droit_rever(image):
 
 if __name__ == "__main__":
     coup_droit_rever("C:/Users/ReViVD/Documents/GitHub/table-tennis-trainer/test_coup_droit.jpg")
-    dezde
     #liste des rebonds: [18,50,82]
     afficher_detection_orange()
     im = tracer_image_niveau_gris_uniforme((200,200,3),255)

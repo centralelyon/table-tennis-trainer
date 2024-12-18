@@ -28,7 +28,6 @@ from utils_interface import *  # Pour calculer_liste_webcams_dispo
 if sys.platform.startswith('win'):
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
-# Capteurs BLE
 sensors_config = {
     "D4:22:CD:00:A0:FD": {"name": "Table", "type": "table"},
     "D4:22:CD:00:9B:E6": {"name": "Raquette A", "type": "raquette"},
@@ -38,7 +37,6 @@ sensors_config = {
 measurement_characteristic_uuid = "15172001-4947-11e9-8646-d663bd873d93"
 complete_quat_characteristic_uuid = "15172003-4947-11e9-8646-d663bd873d93"
 
-# On n'utilise que Complete Quaternion
 payload_modes = {
     "Complete Quaternion": [3, b"\x03"]
 }
@@ -87,7 +85,6 @@ label_cam1.pack(side=tk.LEFT, padx=5, pady=5)
 label_cam2 = tk.Label(frame_videos)
 label_cam2.pack(side=tk.LEFT, padx=5, pady=5)
 
-# Caméras par défaut
 cam1_index = 0
 cam2_index = 2
 
@@ -166,48 +163,118 @@ def butter_bandpass(lowcut, highcut, fs, order=4):
     nyq = 0.5 * fs
     low = lowcut / nyq
     high = highcut / nyq
+    if high >= nyq:
+        # Ajustement si nécessaire
+        return None
     sos = butter(order, [low, high], btype='band', output='sos')
     return sos
 
 sos = butter_bandpass(lowcut, highcut, fs, order)
 
+###############################
+# AJOUT AUTOMATE
+###############################
+STATE_WAIT_SERVE_RACKET = 0
+STATE_WAIT_FIRST_TABLE = 1
+STATE_WAIT_SECOND_TABLE = 2
+STATE_WAIT_OTHER_RACKET = 3
+STATE_WAIT_TABLE = 4
+
+current_server = "Raquette A"  # vous pouvez changer dynamiquement selon server_var
+current_state = STATE_WAIT_SERVE_RACKET
+last_racket = None
+
+def reset_automate():
+    global current_state, current_server, last_racket
+    # réinitialiser la logique si besoin
+    current_server = "Raquette A"
+    current_state = STATE_WAIT_SERVE_RACKET
+    last_racket = None
+
+def next_state_after_racket(racket):
+    global current_state, last_racket
+    if current_state == STATE_WAIT_SERVE_RACKET:
+        last_racket = racket
+        current_state = STATE_WAIT_FIRST_TABLE
+    elif current_state == STATE_WAIT_OTHER_RACKET:
+        last_racket = racket
+        current_state = STATE_WAIT_TABLE
+    # Sinon pas de changement d'état (événement non attendu dans ce contexte)
+
+def next_state_after_table():
+    global current_state
+    if current_state == STATE_WAIT_FIRST_TABLE:
+        current_state = STATE_WAIT_SECOND_TABLE
+    elif current_state == STATE_WAIT_SECOND_TABLE:
+        # Après le service complet (raquette du serveur + 2 tables), on attend l'autre raquette
+        current_state = STATE_WAIT_OTHER_RACKET
+    elif current_state == STATE_WAIT_TABLE:
+        # Après la table en échange normal, on attend l'autre raquette
+        current_state = STATE_WAIT_OTHER_RACKET
+
+def event_allowed(source):
+    # Vérifie si l'événement "source" est autorisé dans l'état courant
+    global current_state, last_racket, current_server
+    if current_state == STATE_WAIT_SERVE_RACKET:
+        # On attend la raquette du serveur
+        return source == current_server
+    elif current_state == STATE_WAIT_FIRST_TABLE:
+        # On attend la table
+        return source == "Table"
+    elif current_state == STATE_WAIT_SECOND_TABLE:
+        # On attend la table
+        return source == "Table"
+    elif current_state == STATE_WAIT_OTHER_RACKET:
+        # On attend la raquette adverse
+        if source.startswith("Raquette"):
+            return (last_racket is not None and source != last_racket)
+        return False
+    elif current_state == STATE_WAIT_TABLE:
+        # On attend la table
+        return source == "Table"
+    return False
+
+def update_automate_after_event(source):
+    # Met à jour l'état après un événement valide
+    if source.startswith("Raquette"):
+        next_state_after_racket(source)
+    elif source == "Table":
+        next_state_after_table()
+
+###############################
+
 def add_bounce_event(source, timestamp):
-    global sequence,frame1,frame2,results1,results2,faire_yolo
-    #faire_yolo = False
-    
+    global sequence, frame1, frame2, results1, results2, faire_yolo
+
+    # AJOUT AUTOMATE : Vérification de l'événement
+    if not event_allowed(source):
+        # Événement non attendu, on l'ignore
+        return
+    else:
+        # Événement autorisé
+        update_automate_after_event(source)
+
     if source == "Raquette A":
         sequence += "A"
-        if len(results1[0].keypoints.xy) > 0:
-            print(results1[0].keypoints.xy[0][4])
+        if len(results1) > 0 and len(results1[0].keypoints.xy) > 0:
             if results1[0].keypoints.xy[0][10][1] == 0 or results1[0].keypoints.xy[0][8][1] == 0:
                 last_bounces.append("Coude ou poignet non visible")
-                print("Coude ou poignet non visible")
             elif results1[0].keypoints.xy[0][10][0] > results1[0].keypoints.xy[0][8][0]:
                 last_bounces.append("revers")
-                print("revers")
             else:
                 last_bounces.append("coup droit")
-                print("coup droit")
     elif source == "Raquette B":
         sequence += "B"
-        if len(results2[0].keypoints.xy) > 0:
+        if len(results2) > 0 and len(results2[0].keypoints.xy) > 0:
             if results2[0].keypoints.xy[0][10][1] == 0 or results2[0].keypoints.xy[0][8][1] == 0:
                 last_bounces.append("Coude ou poignet non visible")
-                print("Coude ou poignet non visible")
             elif results2[0].keypoints.xy[0][10][0] > results2[0].keypoints.xy[0][8][0]:
                 last_bounces.append("revers")
-                print("revers")
             else:
                 last_bounces.append("coup droit")
-                print("coup droit")
-    if source == "Table":
+    elif source == "Table":
         sequence += "R"
-    #frame1_pose = appliquer_pose_estimation(frame1)
-    #frame2_pose = appliquer_pose_estimation(frame2)
-    #image = Image.fromarray(frame1_pose)  # Si l'image est en niveaux de gris
-    #image.save("C:/Users/ReViVD/Documents/GitHub/table-tennis-trainer/image_frame1.png")
-    #image = Image.fromarray(frame2_pose)  # Si l'image est en niveaux de gris
-    #image.save("C:/Users/ReViVD/Documents/GitHub/table-tennis-trainer/image_frame2.png")
+
     event_str = f"{source} - {time.strftime('%H:%M:%S', time.localtime(timestamp))}"
     last_bounces.append(event_str)
     update_bounces_display()
@@ -215,7 +282,7 @@ def add_bounce_event(source, timestamp):
 def update_bounces_display():
     global sequence
     bounces_list.delete(0, tk.END)
-    automate(sequence)
+    check_sequence(sequence)
     for bounce in last_bounces:
         bounces_list.insert(tk.END, bounce)
 
@@ -348,8 +415,7 @@ def try_open_camera(index):
             return None
     return None
 
-# AJOUT : Récupérer la liste des caméras disponibles
-arr = calculer_liste_webcams_dispo()  # par ex. [0,1,2,...]
+arr = calculer_liste_webcams_dispo()
 
 cap1 = try_open_camera(cam1_index)
 cap2 = try_open_camera(cam2_index)
@@ -373,7 +439,7 @@ def update_selected_cameras(*args):
     cap2 = try_open_camera(new_cam2_index)
 
 def update_video_frames():
-    global frame1,frame2,faire_yolo,results1,results2
+    global frame1, frame2, faire_yolo, results1, results2
     if cap1 and cap1.isOpened():
         ret1, frame1 = cap1.read()
     else:
@@ -464,7 +530,6 @@ frame_graph_options.pack(side=tk.BOTTOM, fill=tk.X)
 tk.Checkbutton(frame_graph_options, text="Afficher accélérations (10s)", variable=show_graph_var, command=lambda: toggle_graph()).pack(side=tk.LEFT, padx=5, pady=5)
 tk.Checkbutton(frame_graph_options, text="Faire Yolo", variable=show_graph_var, command=lambda: faire_yolo_modif_value()).pack(side=tk.LEFT, padx=5, pady=5)
 
-
 frame_graph = tk.Frame(root)
 fig = Figure(figsize=(6,4))
 ax_table = fig.add_subplot(3,1,1)
@@ -536,9 +601,8 @@ def toggle_graph():
 
 def faire_yolo_modif_value():
     global faire_yolo
-    faire_yolo = (faire_yolo == False)
+    faire_yolo = not faire_yolo
 
-# AJOUT : Ajout des menus déroulants pour le choix des caméras
 cam1_var = tk.IntVar(value=cam1_index)
 cam2_var = tk.IntVar(value=cam2_index)
 
@@ -550,7 +614,6 @@ cam2_menu.pack(side=tk.LEFT, padx=5, pady=5)
 cam1_var.trace_add("write", update_selected_cameras)
 cam2_var.trace_add("write", update_selected_cameras)
 
-# AJOUT BOUTONS : Ajouter 3 boutons pour rajouter manuellement des rebonds
 tk.Button(frame_controls, text="Rebond Raquette A", command=lambda: add_bounce_event("Raquette A", time.time())).pack(side=tk.LEFT, padx=5, pady=5)
 tk.Button(frame_controls, text="Rebond Raquette B", command=lambda: add_bounce_event("Raquette B", time.time())).pack(side=tk.LEFT, padx=5, pady=5)
 tk.Button(frame_controls, text="Rebond Table", command=lambda: add_bounce_event("Table", time.time())).pack(side=tk.LEFT, padx=5, pady=5)

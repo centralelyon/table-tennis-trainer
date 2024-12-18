@@ -738,6 +738,13 @@ def methode_3_simplified(times, freeacc_x, freeacc_y, freeacc_z, quat_w, quat_x,
     dt = np.median(np.diff(times))
     fs = 1.0 / dt
     nyquist = 0.5 * fs
+
+    nyq = fs / 2.0
+    if highcut >= nyq:
+        highcut = nyq - 0.1
+    if lowcut >= highcut:
+        lowcut = highcut / 2.0
+    
     if lowcut >= highcut:
         raise ValueError("lowcut doit être inférieur à highcut.")
     if lowcut <= 0 or highcut >= nyquist:

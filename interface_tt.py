@@ -524,11 +524,12 @@ root.protocol("WM_DELETE_WINDOW", on_closing)
 update_video_frames()
 
 show_graph_var = tk.BooleanVar(value=False)
+#faire_yolo2 = tk.BooleanVar(value=False)
 
 frame_graph_options = tk.Frame(root)
 frame_graph_options.pack(side=tk.BOTTOM, fill=tk.X)
-tk.Checkbutton(frame_graph_options, text="Afficher accélérations (10s)", variable=show_graph_var, command=lambda: toggle_graph()).pack(side=tk.LEFT, padx=5, pady=5)
-tk.Checkbutton(frame_graph_options, text="Faire Yolo", variable=show_graph_var, command=lambda: faire_yolo_modif_value()).pack(side=tk.LEFT, padx=5, pady=5)
+checkbutton1 = tk.Checkbutton(frame_graph_options, text="Afficher accélérations (10s)", variable=show_graph_var, command=lambda: toggle_graph()).pack(side=tk.LEFT, padx=5, pady=5)
+checkbutton2 = tk.Checkbutton(frame_graph_options, text="Faire Yolo", command=lambda: faire_yolo_modif_value()).pack(side=tk.LEFT, padx=5, pady=5)
 
 frame_graph = tk.Frame(root)
 fig = Figure(figsize=(6,4))

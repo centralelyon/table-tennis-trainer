@@ -89,7 +89,7 @@ label_cam2.pack(side=tk.LEFT, padx=5, pady=5)
 
 # Caméras par défaut
 cam1_index = 0
-cam2_index = 1
+cam2_index = 2
 
 bounces_label = tk.Label(frame_bounces, text="Derniers rebonds détectés:")
 bounces_label.pack(side=tk.TOP)
@@ -172,14 +172,36 @@ def butter_bandpass(lowcut, highcut, fs, order=4):
 sos = butter_bandpass(lowcut, highcut, fs, order)
 
 def add_bounce_event(source, timestamp):
-    global sequence,frame1,frame2
+    global sequence,frame1,frame2,results1,results2,faire_yolo
+    #faire_yolo = False
+    
     if source == "Raquette A":
         sequence += "A"
+        if len(results1[0].keypoints.xy) > 0:
+            print(results1[0].keypoints.xy[0][4])
+            if results1[0].keypoints.xy[0][10][1] == 0 or results1[0].keypoints.xy[0][8][1] == 0:
+                last_bounces.append("Coude ou poignet non visible")
+                print("Coude ou poignet non visible")
+            elif results1[0].keypoints.xy[0][10][0] > results1[0].keypoints.xy[0][8][0]:
+                last_bounces.append("revers")
+                print("revers")
+            else:
+                last_bounces.append("coup droit")
+                print("coup droit")
     elif source == "Raquette B":
         sequence += "B"
+        if len(results2[0].keypoints.xy) > 0:
+            if results2[0].keypoints.xy[0][10][1] == 0 or results2[0].keypoints.xy[0][8][1] == 0:
+                last_bounces.append("Coude ou poignet non visible")
+                print("Coude ou poignet non visible")
+            elif results2[0].keypoints.xy[0][10][0] > results2[0].keypoints.xy[0][8][0]:
+                last_bounces.append("revers")
+                print("revers")
+            else:
+                last_bounces.append("coup droit")
+                print("coup droit")
     if source == "Table":
         sequence += "R"
-    
     #frame1_pose = appliquer_pose_estimation(frame1)
     #frame2_pose = appliquer_pose_estimation(frame2)
     #image = Image.fromarray(frame1_pose)  # Si l'image est en niveaux de gris
@@ -334,6 +356,8 @@ cap2 = try_open_camera(cam2_index)
 
 frame1 = []
 frame2 = []
+results1 = []
+results2 = []
 
 appliquer_pose_estimation(np.zeros((100,100,3), dtype=np.uint8))
 
@@ -349,7 +373,7 @@ def update_selected_cameras(*args):
     cap2 = try_open_camera(new_cam2_index)
 
 def update_video_frames():
-    global frame1,frame2,faire_yolo
+    global frame1,frame2,faire_yolo,results1,results2
     if cap1 and cap1.isOpened():
         ret1, frame1 = cap1.read()
     else:
@@ -364,7 +388,6 @@ def update_video_frames():
         frame1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2RGB)
         if faire_yolo:
             results1 = appliquer_pose_estimation(frame1)
-            print(results1.keypoints.xy)
             frame1 = results1.plot()
         img1 = cv2.resize(frame1, (320, 240))
     else:
@@ -374,7 +397,6 @@ def update_video_frames():
         frame2 = cv2.cvtColor(frame2, cv2.COLOR_BGR2RGB)
         if faire_yolo:
             results2 = appliquer_pose_estimation(frame2)
-            print(results2.keypoints.xy)
             frame2 = results2.plot()
         img2 = cv2.resize(frame2, (320, 240))
     else:

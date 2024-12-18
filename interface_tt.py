@@ -250,12 +250,69 @@ point_timeout_ms = 5000  # 5 secondes
 point_ended = False  # Pour savoir si le point est terminé
 
 def end_point():
-    
-    global point_ended
+    global point_ended, events, current_state, current_server, last_racket
     point_ended = True
-    # Vous pouvez afficher un message ou mettre la machine à états dans un état particulier
     last_bounces.append("Fin du point (pas d'événement depuis 3s)")
     update_bounces_display()
+
+    # Déterminer qui gagne le point
+    # 1. Vérifier si le service a été complété
+    # current_state indique où on en est resté :
+    # - STATE_WAIT_SERVE_RACKET : On attendait encore la raquette du serveur => service jamais commencé correctement
+    # - STATE_WAIT_FIRST_TABLE ou STATE_WAIT_SECOND_TABLE : le service n'a pas été complété (pas 2 rebonds de table)
+    # - STATE_WAIT_OTHER_RACKET ou STATE_WAIT_TABLE : le service a été complété, on est en échange normal
+
+    # Récupérer les deux derniers événements pour l'analyse de fin de point
+    last_two_events = events[-2:] if len(events) >= 2 else events[:]
+    # last_two_events est une liste de tuples (timestamp, source)
+
+    def give_point_to_A():
+        playerA_points.set(playerA_points.get() + 1)
+
+    def give_point_to_B():
+        playerB_points.set(playerB_points.get() + 1)
+
+    if current_state == STATE_WAIT_SERVE_RACKET:
+        # Le serveur n'a même pas frappé correctement => l'adversaire gagne
+        if current_server == "Raquette A":
+            # C'est A qui devait servir, donc B gagne
+            give_point_to_B()
+        else:
+            # C'est B qui devait servir, donc A gagne
+            give_point_to_A()
+
+    elif current_state == STATE_WAIT_FIRST_TABLE or current_state == STATE_WAIT_SECOND_TABLE:
+        # Le service a commencé (raquette du serveur) mais pas complété (pas 2x table)
+        # L'adversaire du serveur gagne
+        if current_server == "Raquette A":
+            # A servait, pas complété => B gagne
+            give_point_to_B()
+        else:
+            # B servait, pas complété => A gagne
+            give_point_to_A()
+
+    else:
+        # Le service est complété (on était dans STATE_WAIT_OTHER_RACKET ou STATE_WAIT_TABLE)
+        # On regarde les deux derniers événements
+        if len(last_two_events) < 2:
+            # Moins de 2 événements, situation rare, on peut estimer qu'aucun échange final n'a eu lieu
+            # Dans ce cas, considérer que l'adversaire du dernier frappeur gagne, ou autre logique
+            # Pour simplifier, si pas assez d'événements, donner le point à l'adversaire du serveur
+            if current_server == "Raquette A":
+                give_point_to_B()
+            else:
+                give_point_to_A()
+        else:
+            # last_two_events contient 2 tuples (timestamp, source)
+            e1_source = last_two_events[0][1]
+            e2_source = last_two_events[1][1]
+
+            # Cas donnant le point à A : (Raquette A, Table) ou (Table, Raquette B)
+            if (e1_source == "Raquette A" and e2_source == "Table") or (e1_source == "Table" and e2_source == "Raquette B"):
+                give_point_to_A()
+            else:
+                # Sinon, point à B
+                give_point_to_B()
 
 def check_point_timeout(last_time_checked):
     global last_event_time, point_ended

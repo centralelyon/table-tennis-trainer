@@ -1,0 +1,8 @@
+numpy
+Pillow
+pygame
+bleak
+opencv-python
+matplotlib
+scipy
+pandas

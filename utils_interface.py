@@ -238,15 +238,16 @@ def appliquer_pose_estimation(frame):
     Fonction qui applique l'estimation de pose de YOLOv8 à une frame et renvoie une image annotée.
     
     :param frame: Image (sous forme de tableau numpy) sur laquelle appliquer l'estimation de pose.
-    :return: Image annotée avec les poses détectées.
+    #:return: Image annotée avec les poses détectées.
+    :return: le resultat.
     """
     # Effectuer une prédiction d'estimation de pose sur la frame
     results = model(frame)
     
     # Annoter la frame avec les poses détectées
-    annotated_frame = results[0].plot()
+    #annotated_frame = results[0].plot()  # pour afficher sur l'image
 
-    return annotated_frame
+    return results[0]
 
 
 def automate(sequence):
@@ -260,7 +261,28 @@ def automate(sequence):
         print("Sequence incorrect")
     
 
+def coup_droit_rever(image):
+    """
+        Fonction permettant de dire sur une image si c'est un coup droit ou un revers en utilisant l'estimation de pose de YOLO
+        Entrée:
+                - image
+        Sortie:
+                - "R" ou "C" (revers ou coup droit)
+    """
+
+    results = model(image)
+
+
+    annotated_frame = results[0].plot()
+    print(results)
+    plt.imshow(annotated_frame)
+    plt.axis('off')  # Masquer les axes
+    plt.show()
+
+
 if __name__ == "__main__":
+    coup_droit_rever("C:/Users/ReViVD/Documents/GitHub/table-tennis-trainer/test_coup_droit.jpg")
+    dezde
     #liste des rebonds: [18,50,82]
     afficher_detection_orange()
     im = tracer_image_niveau_gris_uniforme((200,200,3),255)

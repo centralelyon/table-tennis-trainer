@@ -243,6 +243,8 @@ def update_automate_after_event(source):
 
 ###############################
 
+# Déclarez une liste globale pour stocker les événements
+events = []  # contiendra des tuples (time, source)
 def add_bounce_event(source, timestamp):
     global sequence, frame1, frame2, results1, results2, faire_yolo
 
@@ -278,6 +280,8 @@ def add_bounce_event(source, timestamp):
     event_str = f"{source} - {time.strftime('%H:%M:%S', time.localtime(timestamp))}"
     last_bounces.append(event_str)
     update_bounces_display()
+
+    events.append((timestamp, source))
 
 def update_bounces_display():
     global sequence
@@ -573,6 +577,26 @@ def animate(i):
             ax.set_xlim(0, time_window)
         else:
             ax.text(0.5,0.5,"Aucune donnée", ha='center', va='center')
+        
+        # On cherche les événements survenus dans la fenêtre [current_time - time_window, current_time]
+        for (evt_time, evt_source) in events:
+            if current_time - time_window <= evt_time <= current_time:
+                evt_rel_time = evt_time - (current_time - time_window)
+
+                # Choisir une couleur selon le type d'événement
+                if evt_source == "Raquette A":
+                    evt_color = "green"
+                elif evt_source == "Raquette B":
+                    evt_color = "blue"
+                elif evt_source == "Table":
+                    evt_color = "black"
+                else:
+                    evt_color = "red"
+
+                # Tracer une ligne verticale pour l'événement
+                ax.axvline(evt_rel_time, color=evt_color, linestyle='--', linewidth=2)
+                # Optionnellement, ajouter un petit symbole ou du texte
+                # ax.text(evt_rel_time, ax.get_ylim()[1]*0.9, evt_source[0], color=evt_color, ha='center')
 
     plot_sensor(ax_table, "D4:22:CD:00:A0:FD")
     ax_table.set_title("Table (10s)")

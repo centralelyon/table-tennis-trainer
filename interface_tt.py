@@ -266,6 +266,9 @@ def end_point():
     last_two_events = events[-2:] if len(events) >= 2 else events[:]
     # last_two_events est une liste de tuples (timestamp, source)
 
+    # Fixer le temps de fin du point pour figer le graphe
+    end_of_point_time = last_event_time if last_event_time is not None else time.time()
+
     def give_point_to_A():
         playerA_points.set(playerA_points.get() + 1)
 
@@ -367,18 +370,25 @@ def add_bounce_event(source, timestamp):
     last_event_time = timestamp
     root.after(point_timeout_ms, lambda: check_point_timeout(timestamp))
 
+# Variables globales pour gérer le temps de début et de fin du point
+start_of_point_time = None
+end_of_point_time = None
+
 def start_new_point():
     global events, sequence, point_ended, last_racket, current_state, current_server, last_event_time
-    # Réinitialiser l'automate
+    global start_of_point_time, end_of_point_time
+
     reset_automate()
     sequence = ""
     events.clear()
     point_ended = False
     last_event_time = None
-    # Si vous voulez réinitialiser l'affichage des rebonds
     last_bounces.clear()
     update_bounces_display()
-    # Si besoin, réinitialiser le serveur, etc.
+
+    # Enregistrer le temps de début du point
+    start_of_point_time = time.time()
+    end_of_point_time = None  # Pas encore de fin
 def update_bounces_display():
     global sequence
     bounces_list.delete(0, tk.END)
@@ -642,8 +652,23 @@ canvas_graph = FigureCanvasTkAgg(fig, master=frame_graph)
 ani = None
 
 def animate(i):
-    current_time = time.time()
-    time_window = 10.0
+    # Si on ne veut pas animer une fois terminé, on peut vérifier :
+    # if point_ended:
+    #     return
+
+    # On utilise start_of_point_time et éventuellement end_of_point_time
+    if start_of_point_time is None:
+        # Si pour une raison quelconque, le point n'a pas commencé, rien à afficher
+        return
+
+    if not point_ended:
+        # Le point est en cours, on affiche jusqu'au temps actuel
+        current_upper_time = time.time()
+    else:
+        # Le point est terminé, on fige le graphique au temps de fin
+        if end_of_point_time is None:
+            end_of_point_time = time.time()  # au cas où
+        current_upper_time = end_of_point_time
 
     ax_table.clear()
     ax_raqA.clear()
@@ -656,12 +681,16 @@ def animate(i):
             ys = sensors_config[sensor_addr]["ys"]
             zs = sensors_config[sensor_addr]["zs"]
 
-        indices = [i for i,t in enumerate(times) if t >= current_time - time_window]
+        # Ici, on ne filtre plus sur les 10 dernières secondes
+        # On prend tous les échantillons depuis start_of_point_time jusqu'à current_upper_time
+        indices = [j for j,t in enumerate(times) if start_of_point_time <= t <= current_upper_time]
+
         if len(indices) > 0:
-            times_rel = [times[i] - (current_time - time_window) for i in indices]
-            xs_plot = [xs[i] for i in indices]
-            ys_plot = [ys[i] for i in indices]
-            zs_plot = [zs[i] for i in indices]
+            # Calculer les temps relatifs par rapport au début du point
+            times_rel = [times[j] - start_of_point_time for j in indices]
+            xs_plot = [xs[j] for j in indices]
+            ys_plot = [ys[j] for j in indices]
+            zs_plot = [zs[j] for j in indices]
 
             ax.plot(times_rel, xs_plot, label="Acc_X", color="red")
             ax.plot(times_rel, ys_plot, label="Acc_Y", color="green")
@@ -670,16 +699,15 @@ def animate(i):
             ax.set_ylabel("g")
             ax.grid(True)
             ax.legend()
-            ax.set_xlim(0, time_window)
+            # Ajuster les limites x pour voir tout le point
+            ax.set_xlim(0, max(times_rel))
         else:
             ax.text(0.5,0.5,"Aucune donnée", ha='center', va='center')
-        
-        # On cherche les événements survenus dans la fenêtre [current_time - time_window, current_time]
-        for (evt_time, evt_source) in events:
-            if current_time - time_window <= evt_time <= current_time:
-                evt_rel_time = evt_time - (current_time - time_window)
 
-                # Choisir une couleur selon le type d'événement
+        # Tracer les événements dans l'intervalle du point
+        for (evt_time, evt_source) in events:
+            if start_of_point_time <= evt_time <= current_upper_time:
+                evt_rel_time = evt_time - start_of_point_time
                 if evt_source == "Raquette A":
                     evt_color = "green"
                 elif evt_source == "Raquette B":
@@ -688,21 +716,17 @@ def animate(i):
                     evt_color = "black"
                 else:
                     evt_color = "red"
-
-                # Tracer une ligne verticale pour l'événement
                 ax.axvline(evt_rel_time, color=evt_color, linestyle='--', linewidth=2)
-                # Optionnellement, ajouter un petit symbole ou du texte
-                # ax.text(evt_rel_time, ax.get_ylim()[1]*0.9, evt_source[0], color=evt_color, ha='center')
 
     plot_sensor(ax_table, "D4:22:CD:00:A0:FD")
-    ax_table.set_title("Table (10s)")
+    ax_table.set_title("Table")
 
     plot_sensor(ax_raqA, "D4:22:CD:00:9B:E6")
-    ax_raqA.set_title("Raquette A (10s)")
+    ax_raqA.set_title("Raquette A")
 
     plot_sensor(ax_raqB, "D4:22:CD:00:9E:2F")
-    ax_raqB.set_title("Raquette B (10s)")
-    ax_raqB.set_xlabel("Temps (s)")
+    ax_raqB.set_title("Raquette B")
+    ax_raqB.set_xlabel("Temps depuis début du point (s)")
 
     fig.tight_layout()
 

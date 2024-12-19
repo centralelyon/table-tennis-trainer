@@ -18,8 +18,11 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.animation as animation
 from scipy.signal import butter, sosfilt
 
+
+
 sys.path.append('./')
 from utils_interface import *  # Pour calculer_liste_webcams_dispo
+import config
 
 #######################
 # Configuration générale
@@ -96,8 +99,8 @@ label_cam1.pack(side=tk.LEFT, padx=5, pady=5)
 label_cam2 = tk.Label(frame_videos)
 label_cam2.pack(side=tk.LEFT, padx=5, pady=5)
 
-cam1_index = 0
-cam2_index = 2
+cam1_index = config.USER_PREFERENCE["num_camera1"]
+cam2_index = config.USER_PREFERENCE["num_camera2"]
 
 bounces_label = tk.Label(frame_bounces, text="Derniers rebonds détectés:")
 bounces_label.pack(side=tk.TOP)

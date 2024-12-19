@@ -6,3 +6,6 @@ opencv-python
 matplotlib
 scipy
 pandas
+tkinter
+ultralytics
+scikit-learn

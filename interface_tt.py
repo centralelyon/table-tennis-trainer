@@ -201,7 +201,7 @@ last_racket = None
 def reset_automate():
     global current_state, current_server, last_racket
     # réinitialiser la logique si besoin
-    current_server = "Raquette A"
+    # Ne pas fixer current_server ici, on le fixera dans start_new_point()
     current_state = STATE_WAIT_SERVE_RACKET
     last_racket = None
 
@@ -469,26 +469,23 @@ def start_new_point():
     # Mettre à jour la figure et le canvas
     fig.canvas.draw_idle()
 
-    # Enregistrer le serveur initial du set
+    # Déterminer le serveur initial du set à partir de server_var
     initial_server_set = "Raquette A" if server_var.get() == "A" else "Raquette B"
+    # Mettre à jour le current_server en fonction du serveur courant
+    current_server = initial_server_set
 
     # Définir le temps de début du nouveau point
-    start_of_point_time = time.time()  
+    start_of_point_time = time.time()
     end_of_point_time = None
 
     # Si l'affichage des graphes est actif, relancer l'animation
     if show_graph_var.get():
-        # Arrêter l'ancienne animation si elle existe
         if ani is not None:
             ani.event_source.stop()
             ani = None
-        # Relancer une nouvelle animation
         ani = animation.FuncAnimation(fig, animate, interval=100, blit=False, cache_frame_data=False)
-        # S'assurer que le canvas est bien affiché
         canvas_graph.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         frame_graph.grid()
-
-
 
 def update_bounces_display():
     global sequence
@@ -761,6 +758,8 @@ def animate(i):
     # Si on ne veut pas animer une fois terminé, on peut vérifier :
     # if point_ended:
     #     return
+
+    global end_of_point_time
 
     # On utilise start_of_point_time et éventuellement end_of_point_time
     if start_of_point_time is None:

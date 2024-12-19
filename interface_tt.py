@@ -42,7 +42,7 @@ payload_modes = {
 }
 
 pygame.mixer.init()
-sound = None
+sound = pygame.mixer.Sound("rebond_beep-07a.wav")
 sequence = ""
 
 root = tk.Tk()

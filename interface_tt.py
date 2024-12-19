@@ -263,6 +263,40 @@ last_event_time = None
 point_timeout_ms = 5000  # 5 secondes
 point_ended = False  # Pour savoir si le point est terminé
 
+def check_set_winner():
+    a_points = playerA_points.get()
+    b_points = playerB_points.get()
+    # Condition pour gagner un set :
+    # - Atteindre au moins 11 points
+    # - Avoir 2 points d'écart
+    if (a_points >= 11 or b_points >= 11) and abs(a_points - b_points) >= 2:
+        # Un joueur a gagné le set
+        if a_points > b_points:
+            # A gagne le set
+            playerA_sets.set(playerA_sets.get() + 1)
+        else:
+            # B gagne le set
+            playerB_sets.set(playerB_sets.get() + 1)
+        # Réinitialiser les points
+        playerA_points.set(0)
+        playerB_points.set(0)
+
+def give_point_to_A():
+    playerA_points.set(playerA_points.get() + 1)
+    check_set_winner()
+
+def give_point_to_B():
+    
+    playerB_points.set(playerB_points.get() + 1)
+    check_set_winner()
+
+def remove_point_from_player_A():
+    playerA_points.set(max(0, playerA_points.get()-1))
+    check_set_winner()
+
+def remove_point_from_player_B():
+    playerB_points.set(max(0, playerB_points.get()-1))
+    check_set_winner()
 def end_point():
     global point_ended, events, current_state, current_server, last_racket
     point_ended = True
@@ -282,12 +316,6 @@ def end_point():
 
     # Fixer le temps de fin du point pour figer le graphe
     end_of_point_time = last_event_time if last_event_time is not None else time.time()
-
-    def give_point_to_A():
-        playerA_points.set(playerA_points.get() + 1)
-
-    def give_point_to_B():
-        playerB_points.set(playerB_points.get() + 1)
 
     if current_state == STATE_WAIT_SERVE_RACKET:
         # Le serveur n'a même pas frappé correctement => l'adversaire gagne
@@ -330,6 +358,7 @@ def end_point():
             else:
                 # Sinon, point à B
                 give_point_to_B()
+    check_set_winner()
 
 def check_point_timeout(last_time_checked):
     global last_event_time, point_ended
@@ -777,8 +806,10 @@ cam2_menu.pack(side=tk.LEFT, padx=5, pady=5)
 cam1_var.trace_add("write", update_selected_cameras)
 cam2_var.trace_add("write", update_selected_cameras)
 
-tk.Button(frame_controls, text="Rebond Raquette A", command=lambda: add_bounce_event("Raquette A", time.time())).pack(side=tk.LEFT, padx=5, pady=5)
-tk.Button(frame_controls, text="Rebond Raquette B", command=lambda: add_bounce_event("Raquette B", time.time())).pack(side=tk.LEFT, padx=5, pady=5)
+tk.Button(frame_scoreboard, text="+", command=give_point_to_A).grid(row=2, column=2)
+tk.Button(frame_scoreboard, text="-", command=remove_point_from_player_A).grid(row=2, column=4)
+tk.Button(frame_scoreboard, text="+", command=give_point_to_B).grid(row=2, column=5)
+tk.Button(frame_scoreboard, text="-", command=remove_point_from_player_B).grid(row=2, column=6)
 tk.Button(frame_controls, text="Rebond Table", command=lambda: add_bounce_event("Table", time.time())).pack(side=tk.LEFT, padx=5, pady=5)
 tk.Button(frame_controls, text="Nouveau point", command=start_new_point).pack(side=tk.LEFT, padx=5, pady=5)
 

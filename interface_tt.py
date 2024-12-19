@@ -397,13 +397,13 @@ def add_bounce_event(source, timestamp):
     global sequence, frame1, frame2, results1, results2, faire_yolo, last_event_time, point_ended
 
     if point_ended:
-        # Si le point est déjà terminé, on ignore les événements
-        return
+        # Si le point est déjà terminé, on ignore l'événement
+        return False
     
-    # AJOUT AUTOMATE : Vérification de l'événement
+    # Vérification si l'événement est autorisé
     if not event_allowed(source):
-        # Événement non attendu, on l'ignore
-        return
+        # Événement non attendu dans cette séquence
+        return False
     else:
         # Événement autorisé
         update_automate_after_event(source)
@@ -434,9 +434,12 @@ def add_bounce_event(source, timestamp):
     update_bounces_display()
     events.append((timestamp, source))
 
-    # Mettre à jour last_event_time et programmer le check timeout
+    # Mise à jour de last_event_time
     last_event_time = timestamp
     root.after(point_timeout_ms, lambda: check_point_timeout(timestamp))
+
+    return True
+
 
 # Variables globales pour gérer le temps de début et de fin du point
 start_of_point_time = None
@@ -495,13 +498,17 @@ def update_bounces_display():
         bounces_list.insert(tk.END, bounce)
 
 def detect_bounces_table(sensor, deriv_magnitude, current_time):
+    global point_ended
     if deriv_magnitude > threshold and (current_time - sensor["last_bounce_time"]) >= min_interval:
         sensor["last_bounce_time"] = current_time
-        add_bounce_event(sensor["name"], current_time)
-        if sound:
+        # On tente d'ajouter l'événement
+        event_added = add_bounce_event(sensor["name"], current_time)
+        # On joue le son seulement si l'événement a été vraiment ajouté et que le point n'est pas terminé
+        if event_added and not point_ended and sound:
             sound.play()
 
 def detect_bounces_raquette(sensor):
+    global point_ended
     with data_lock:
         times_arr = np.array(sensor["times"])
         freeacc_x = np.array(sensor["xs"])
@@ -516,8 +523,9 @@ def detect_bounces_raquette(sensor):
     for rebound_time in detected_rebounds:
         if rebound_time - sensor["last_bounce_time"] >= min_interval:
             sensor["last_bounce_time"] = rebound_time
-            add_bounce_event(sensor["name"], rebound_time)
-            if sound:
+            event_added = add_bounce_event(sensor["name"], rebound_time)
+            # On joue le son seulement si l'événement a été vraiment ajouté et que le point n'est pas terminé
+            if event_added and not point_ended and sound:
                 sound.play()
 
 def parse_complete_quaternion_data(data_bytes):

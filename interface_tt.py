@@ -445,7 +445,7 @@ end_of_point_time = None
 def start_new_point():
     global events, sequence, point_ended, last_racket, current_state, current_server, last_event_time
     global start_of_point_time, end_of_point_time, initial_server_set
-    global ax_table, ax_raqA, ax_raqB
+    global ax_table, ax_raqA, ax_raqB, ani
 
     reset_automate()
     sequence = ""
@@ -469,9 +469,21 @@ def start_new_point():
     # Enregistrer le serveur initial du set
     initial_server_set = "Raquette A" if server_var.get() == "A" else "Raquette B"
 
-    # Enregistrer le temps de début du point
-    start_of_point_time = None
+    # Définir le temps de début du nouveau point
+    start_of_point_time = time.time()  
     end_of_point_time = None
+
+    # Si l'affichage des graphes est actif, relancer l'animation
+    if show_graph_var.get():
+        # Arrêter l'ancienne animation si elle existe
+        if ani is not None:
+            ani.event_source.stop()
+            ani = None
+        # Relancer une nouvelle animation
+        ani = animation.FuncAnimation(fig, animate, interval=100, blit=False, cache_frame_data=False)
+        # S'assurer que le canvas est bien affiché
+        canvas_graph.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+        frame_graph.grid()
 
 
 

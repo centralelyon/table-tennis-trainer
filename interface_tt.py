@@ -260,8 +260,32 @@ def update_automate_after_event(source):
 # Variables globales
 events = []
 last_event_time = None
-point_timeout_ms = 5000  # 5 secondes
+point_timeout_ms = 3000  # 5 secondes
 point_ended = False  # Pour savoir si le point est terminé
+initial_server_set = None
+
+
+def update_server():
+    a_points = playerA_points.get()
+    b_points = playerB_points.get()
+    points_count = a_points + b_points
+    # Détermination du nombre total de changements
+    if points_count < 20:
+        switches = points_count // 2
+    else:
+        switches = points_count - 10
+
+    # Déterminer le serveur initial du set (déjà stocké dans initial_server_set)
+    # Si initial_server_set == "Raquette A"
+    if initial_server_set == "Raquette A":
+        # Si switches est pair, serveur = "Raquette A", sinon "Raquette B"
+        current_server = "Raquette A" if (switches % 2 == 0) else "Raquette B"
+    else:
+        # Si initial_server_set == "Raquette B"
+        current_server = "Raquette B" if (switches % 2 == 0) else "Raquette A"
+
+    # Mettre à jour l'affichage
+    server_var.set("A" if current_server == "Raquette A" else "B")
 
 def check_set_winner():
     a_points = playerA_points.get()
@@ -284,11 +308,12 @@ def check_set_winner():
 def give_point_to_A():
     playerA_points.set(playerA_points.get() + 1)
     check_set_winner()
+    update_server()
 
-def give_point_to_B():
-    
+def give_point_to_B():    
     playerB_points.set(playerB_points.get() + 1)
     check_set_winner()
+    update_server()
 
 def remove_point_from_player_A():
     playerA_points.set(max(0, playerA_points.get()-1))
@@ -419,7 +444,7 @@ end_of_point_time = None
 
 def start_new_point():
     global events, sequence, point_ended, last_racket, current_state, current_server, last_event_time
-    global start_of_point_time, end_of_point_time
+    global start_of_point_time, end_of_point_time, initial_server_set
 
     reset_automate()
     sequence = ""
@@ -429,15 +454,22 @@ def start_new_point():
     last_bounces.clear()
     update_bounces_display()
 
+    # Enregistrer le serveur initial du set
+    initial_server_set = "Raquette A" if server_var.get() == "A" else "Raquette B"
+
     # Enregistrer le temps de début du point
     start_of_point_time = time.time()
     end_of_point_time = None  # Pas encore de fin
+
+
 def update_bounces_display():
     global sequence
     bounces_list.delete(0, tk.END)
     check_sequence(sequence)
     for bounce in last_bounces:
         bounces_list.insert(tk.END, bounce)
+
+
 
 def detect_bounces_table(sensor, deriv_magnitude, current_time):
     if deriv_magnitude > threshold and (current_time - sensor["last_bounce_time"]) >= min_interval:

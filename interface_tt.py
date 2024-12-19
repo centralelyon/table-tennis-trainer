@@ -58,11 +58,22 @@ threshold_var = tk.DoubleVar(value=threshold)
 
 last_bounces = deque(maxlen=10)
 
-frame_top = tk.Frame(root)
-frame_top.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+#frame_top = tk.Frame(root)
+#frame_top.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
-frame_videos = tk.Frame(frame_top)
-frame_videos.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+frame_main = tk.Frame(root)
+frame_main.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+frame_videos = tk.Frame(frame_main)
+frame_videos.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+
+frame_graph = tk.Frame(frame_main)
+frame_graph.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
+
+# On configure les colonnes pour qu’elles s’ajustent
+frame_main.grid_columnconfigure(0, weight=1)  # vidéos prend de la place
+frame_main.grid_columnconfigure(1, weight=1)  # graph prend de la place
+frame_main.grid_rowconfigure(0, weight=1)
 
 frame_score = tk.Frame(root)
 frame_score.pack(side=tk.BOTTOM, fill=tk.X)
@@ -641,7 +652,7 @@ frame_graph_options.pack(side=tk.BOTTOM, fill=tk.X)
 checkbutton1 = tk.Checkbutton(frame_graph_options, text="Afficher accélérations (10s)", variable=show_graph_var, command=lambda: toggle_graph()).pack(side=tk.LEFT, padx=5, pady=5)
 checkbutton2 = tk.Checkbutton(frame_graph_options, text="Faire Yolo", command=lambda: faire_yolo_modif_value()).pack(side=tk.LEFT, padx=5, pady=5)
 
-frame_graph = tk.Frame(root)
+
 fig = Figure(figsize=(6,4))
 ax_table = fig.add_subplot(3,1,1)
 ax_raqA = fig.add_subplot(3,1,2)
@@ -733,16 +744,20 @@ def animate(i):
 def toggle_graph():
     global ani
     if show_graph_var.get():
-        frame_graph.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
+        # Lancer l'animation
+        ani = animation.FuncAnimation(fig, animate, interval=100, blit=False, cache_frame_data=False)
+        # S'assurer que le widget est visible avant de lancer l'animation
         canvas_graph.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-        ani = animation.FuncAnimation(fig, animate, interval=100, blit=False)
+        frame_graph.grid()  # Affiche le frame_graph s'il était caché
     else:
+        # Désactiver l'affichage des graphes
         if ani is not None:
             ani.event_source.stop()
-            ani._stop()
             ani = None
+        # Cacher le canvas
         canvas_graph.get_tk_widget().pack_forget()
-        frame_graph.pack_forget()
+        # Cacher le frame_graph si souhaité
+        frame_graph.grid_remove()
 
 def faire_yolo_modif_value():
     global faire_yolo

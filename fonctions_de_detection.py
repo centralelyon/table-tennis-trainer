@@ -713,7 +713,7 @@ def methode_3(file_path, t_lines_original, lowcut=15, highcut=20, order=4, quat_
 
 
 def methode_3_simplified(times, freeacc_x, freeacc_y, freeacc_z, quat_w, quat_x, quat_y, quat_z, 
-                         lowcut=15, highcut=20, order=4, quat_threshold=0.0010):
+                         lowcut=15, highcut=20, order=4, quat_threshold=0.0015):
     """
     Détecte les rebonds sur la raquette de tennis de table à partir des quaternions filtrés.
     Cette version n'utilise pas de fichier CSV ni de données annotées.

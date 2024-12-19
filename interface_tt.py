@@ -445,6 +445,7 @@ end_of_point_time = None
 def start_new_point():
     global events, sequence, point_ended, last_racket, current_state, current_server, last_event_time
     global start_of_point_time, end_of_point_time, initial_server_set
+    global ax_table, ax_raqA, ax_raqB
 
     reset_automate()
     sequence = ""
@@ -454,12 +455,24 @@ def start_new_point():
     last_bounces.clear()
     update_bounces_display()
 
+    # Effacer la figure existante
+    fig.clear()
+
+    # Recréer les subplots
+    ax_table = fig.add_subplot(3,1,1)
+    ax_raqA = fig.add_subplot(3,1,2)
+    ax_raqB = fig.add_subplot(3,1,3)
+
+    # Mettre à jour la figure et le canvas
+    fig.canvas.draw_idle()
+
     # Enregistrer le serveur initial du set
     initial_server_set = "Raquette A" if server_var.get() == "A" else "Raquette B"
 
     # Enregistrer le temps de début du point
-    start_of_point_time = time.time()
-    end_of_point_time = None  # Pas encore de fin
+    start_of_point_time = None
+    end_of_point_time = None
+
 
 
 def update_bounces_display():
@@ -468,8 +481,6 @@ def update_bounces_display():
     check_sequence(sequence)
     for bounce in last_bounces:
         bounces_list.insert(tk.END, bounce)
-
-
 
 def detect_bounces_table(sensor, deriv_magnitude, current_time):
     if deriv_magnitude > threshold and (current_time - sensor["last_bounce_time"]) >= min_interval:

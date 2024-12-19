@@ -3,6 +3,11 @@
 ## Installation:
 - Installer [yolov8](https://docs.ultralytics.com/models/yolov8/)
 
+## Configuration
+- Télécharger [config_ini](https://github.com/centralelyon/table-tennis-trainer/blob/main/config_ini.py)
+- Renomer config_ini.py en config.py
+- Modifier les valeurs de config.py
+
 ## Utilisation
 Script de l'interface finale (en cours) : [interface_tt.py](https://github.com/centralelyon/table-tennis-trainer/blob/main/interface_tt.py)
 

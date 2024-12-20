@@ -21,126 +21,11 @@ from scipy.signal import butter, sosfilt
 
 
 sys.path.append('./')
-from utils_interface import *  # Pour calculer_liste_webcams_dispo
+from utils import *  # Pour calculer_liste_webcams_dispo
 import config
 
-#######################
-# Configuration générale
-#######################
 
-if sys.platform.startswith('win'):
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
-sensors_config = {
-    "D4:22:CD:00:A0:FD": {"name": "Table", "type": "table"},
-    "D4:22:CD:00:9B:E6": {"name": "Raquette A", "type": "raquette"},
-    "D4:22:CD:00:9E:2F": {"name": "Raquette B", "type": "raquette"}
-}
-
-measurement_characteristic_uuid = "15172001-4947-11e9-8646-d663bd873d93"
-complete_quat_characteristic_uuid = "15172003-4947-11e9-8646-d663bd873d93"
-
-payload_modes = {
-    "Complete Quaternion": [3, b"\x03"]
-}
-
-pygame.mixer.init()
-sound = pygame.mixer.Sound("rebond_beep-07a.wav")
-sequence = ""
-
-root = tk.Tk()
-root.title("Interface Tennis de Table")
-
-playerA_sets = tk.IntVar(value=0)
-playerB_sets = tk.IntVar(value=0)
-playerA_points = tk.IntVar(value=0)
-playerB_points = tk.IntVar(value=0)
-server_var = tk.StringVar(value="A")
-threshold = 0.40
-threshold_var = tk.DoubleVar(value=threshold)
-
-last_bounces = deque(maxlen=10)
-
-#frame_top = tk.Frame(root)
-#frame_top.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-
-frame_main = tk.Frame(root)
-frame_main.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-
-frame_videos = tk.Frame(frame_main)
-frame_videos.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
-
-frame_graph = tk.Frame(frame_main)
-frame_graph.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
-
-# On configure les colonnes pour qu’elles s’ajustent
-frame_main.grid_columnconfigure(0, weight=1)  # vidéos prend de la place
-frame_main.grid_columnconfigure(1, weight=1)  # graph prend de la place
-frame_main.grid_rowconfigure(0, weight=1)
-
-frame_score = tk.Frame(root)
-frame_score.pack(side=tk.BOTTOM, fill=tk.X)
-
-frame_bounces = tk.Frame(frame_score)
-frame_bounces.pack(side=tk.LEFT, padx=10)
-
-frame_scoreboard = tk.Frame(frame_score)
-frame_scoreboard.pack(side=tk.LEFT, padx=10)
-
-frame_server = tk.Frame(frame_score)
-frame_server.pack(side=tk.LEFT, padx=10)
-
-frame_controls = tk.Frame(root)
-frame_controls.pack(side=tk.BOTTOM, fill=tk.X)
-
-label_cam1 = tk.Label(frame_videos)
-label_cam1.pack(side=tk.LEFT, padx=5, pady=5)
-
-label_cam2 = tk.Label(frame_videos)
-label_cam2.pack(side=tk.LEFT, padx=5, pady=5)
-
-cam1_index = config.USER_PREFERENCE["camera"]["num_camera1"]
-cam2_index = config.USER_PREFERENCE["camera"]["num_camera2"]
-
-bounces_label = tk.Label(frame_bounces, text="Derniers rebonds détectés:")
-bounces_label.pack(side=tk.TOP)
-bounces_list = tk.Listbox(frame_bounces, height=10, width=40)
-bounces_list.pack(side=tk.TOP)
-
-tk.Label(frame_scoreboard, text="Joueur A").grid(row=0, column=1, padx=5)
-tk.Label(frame_scoreboard, text="Joueur B").grid(row=0, column=3, padx=5)
-
-tk.Label(frame_scoreboard, text="Sets:").grid(row=1, column=0)
-label_A_sets = tk.Label(frame_scoreboard, textvariable=playerA_sets)
-label_A_sets.grid(row=1, column=1)
-tk.Button(frame_scoreboard, text="+", command=lambda: playerA_sets.set(playerA_sets.get()+1)).grid(row=1, column=2)
-tk.Button(frame_scoreboard, text="-", command=lambda: playerA_sets.set(max(0,playerA_sets.get()-1))).grid(row=1, column=4)
-
-label_B_sets = tk.Label(frame_scoreboard, textvariable=playerB_sets)
-label_B_sets.grid(row=1, column=3)
-tk.Button(frame_scoreboard, text="+", command=lambda: playerB_sets.set(playerB_sets.get()+1)).grid(row=1, column=5)
-tk.Button(frame_scoreboard, text="-", command=lambda: playerB_sets.set(max(0,playerB_sets.get()-1))).grid(row=1, column=6)
-
-tk.Label(frame_scoreboard, text="Points:").grid(row=2, column=0)
-label_A_points = tk.Label(frame_scoreboard, textvariable=playerA_points)
-label_A_points.grid(row=2, column=1)
-tk.Button(frame_scoreboard, text="+", command=lambda: playerA_points.set(playerA_points.get()+1)).grid(row=2, column=2)
-tk.Button(frame_scoreboard, text="-", command=lambda: playerA_points.set(max(0,playerA_points.get()-1))).grid(row=2, column=4)
-
-label_B_points = tk.Label(frame_scoreboard, textvariable=playerB_points)
-label_B_points.grid(row=2, column=3)
-tk.Button(frame_scoreboard, text="+", command=lambda: playerB_points.set(playerB_points.get()+1)).grid(row=2, column=5)
-tk.Button(frame_scoreboard, text="-", command=lambda: playerB_points.set(max(0,playerB_points.get()-1))).grid(row=2, column=6)
-
-tk.Label(frame_server, text="Serveur actuel:").pack(side=tk.LEFT)
-label_server = tk.Label(frame_server, textvariable=server_var, fg="red")
-label_server.pack(side=tk.LEFT, padx=5)
-tk.Button(frame_server, text="↔", command=lambda: server_var.set("A" if server_var.get()=="B" else "B")).pack(side=tk.LEFT, padx=5)
-
-threshold_label = tk.Label(frame_controls, text="Seuil de détection (g/s) :")
-threshold_label.pack(side=tk.LEFT, padx=5, pady=5)
-threshold_entry = tk.Entry(frame_controls, textvariable=threshold_var, width=5)
-threshold_entry.pack(side=tk.LEFT, padx=5, pady=5)
 
 def update_threshold(*args):
     global threshold
@@ -148,30 +33,7 @@ def update_threshold(*args):
         threshold = float(threshold_var.get())
     except ValueError:
         threshold_var.set(threshold)
-threshold_var.trace_add("write", update_threshold)
 
-delta_t = 0.05
-min_interval = 0.5
-faire_yolo = False
-data_lock = threading.Lock()
-
-for addr in sensors_config.keys():
-    sensors_config[addr].update({
-        "times": [],
-        "xs": [], "ys": [], "zs": [],
-        "quat_w": [], "quat_x": [], "quat_y": [], "quat_z": [],
-        "deriv_x": [], "deriv_y": [], "deriv_z": [],
-        "last_bounce_time": 0,
-        "window_size": 5,
-        "acc_x_filtered_prev": 0,
-        "acc_y_filtered_prev": 0,
-        "acc_z_filtered_prev": 0
-    })
-
-lowcut = 20.0
-highcut = 25.0
-order = 4
-fs = 100.0
 def butter_bandpass(lowcut, highcut, fs, order=4):
     from scipy.signal import butter
     nyq = 0.5 * fs
@@ -183,20 +45,6 @@ def butter_bandpass(lowcut, highcut, fs, order=4):
     sos = butter(order, [low, high], btype='band', output='sos')
     return sos
 
-sos = butter_bandpass(lowcut, highcut, fs, order)
-
-###############################
-# AJOUT AUTOMATE
-###############################
-STATE_WAIT_SERVE_RACKET = 0
-STATE_WAIT_FIRST_TABLE = 1
-STATE_WAIT_SECOND_TABLE = 2
-STATE_WAIT_OTHER_RACKET = 3
-STATE_WAIT_TABLE = 4
-
-current_server = "Raquette A"  # vous pouvez changer dynamiquement selon server_var
-current_state = STATE_WAIT_SERVE_RACKET
-last_racket = None
 
 def reset_automate():
     global current_state, current_server, last_racket
@@ -256,13 +104,6 @@ def update_automate_after_event(source):
         next_state_after_table()
 
 ###############################
-
-# Variables globales
-events = []
-last_event_time = None
-point_timeout_ms = 3000  # 5 secondes
-point_ended = False  # Pour savoir si le point est terminé
-initial_server_set = None
 
 
 def update_server():
@@ -441,9 +282,6 @@ def add_bounce_event(source, timestamp):
     return True
 
 
-# Variables globales pour gérer le temps de début et de fin du point
-start_of_point_time = None
-end_of_point_time = None
 
 def start_new_point():
     global events, sequence, point_ended, last_racket, current_state, current_server, last_event_time
@@ -628,17 +466,6 @@ def try_open_camera(index):
             return None
     return None
 
-arr = calculer_liste_webcams_dispo()
-
-cap1 = try_open_camera(cam1_index)
-cap2 = try_open_camera(cam2_index)
-
-frame1 = []
-frame2 = []
-results1 = []
-results2 = []
-
-appliquer_pose_estimation(np.zeros((100,100,3), dtype=np.uint8))
 
 def update_selected_cameras(*args):
     global cap1, cap2
@@ -732,27 +559,6 @@ def on_closing():
         cap2.release()
     root.destroy()
 
-root.protocol("WM_DELETE_WINDOW", on_closing)
-
-update_video_frames()
-
-show_graph_var = tk.BooleanVar(value=False)
-#faire_yolo2 = tk.BooleanVar(value=False)
-
-frame_graph_options = tk.Frame(root)
-frame_graph_options.pack(side=tk.BOTTOM, fill=tk.X)
-checkbutton1 = tk.Checkbutton(frame_graph_options, text="Afficher accélérations (10s)", variable=show_graph_var, command=lambda: toggle_graph()).pack(side=tk.LEFT, padx=5, pady=5)
-checkbutton2 = tk.Checkbutton(frame_graph_options, text="Faire Yolo", command=lambda: faire_yolo_modif_value()).pack(side=tk.LEFT, padx=5, pady=5)
-
-
-fig = Figure(figsize=(6,4))
-ax_table = fig.add_subplot(3,1,1)
-ax_raqA = fig.add_subplot(3,1,2)
-ax_raqB = fig.add_subplot(3,1,3)
-
-canvas_graph = FigureCanvasTkAgg(fig, master=frame_graph)
-
-ani = None
 
 def animate(i):
     # Si on ne veut pas animer une fois terminé, on peut vérifier :
@@ -857,26 +663,244 @@ def faire_yolo_modif_value():
     global faire_yolo
     faire_yolo = not faire_yolo
 
-cam1_var = tk.IntVar(value=cam1_index)
-cam2_var = tk.IntVar(value=cam2_index)
 
-cam1_menu = tk.OptionMenu(frame_controls, cam1_var, *arr)
-cam1_menu.pack(side=tk.LEFT, padx=5, pady=5)
-cam2_menu = tk.OptionMenu(frame_controls, cam2_var, *arr)
-cam2_menu.pack(side=tk.LEFT, padx=5, pady=5)
+if __name__ == "__main__":
 
-cam1_var.trace_add("write", update_selected_cameras)
-cam2_var.trace_add("write", update_selected_cameras)
 
-tk.Button(frame_scoreboard, text="+", command=give_point_to_A).grid(row=2, column=2)
-tk.Button(frame_scoreboard, text="-", command=remove_point_from_player_A).grid(row=2, column=4)
-tk.Button(frame_scoreboard, text="+", command=give_point_to_B).grid(row=2, column=5)
-tk.Button(frame_scoreboard, text="-", command=remove_point_from_player_B).grid(row=2, column=6)
-tk.Button(frame_controls, text="Rebond Table", command=lambda: add_bounce_event("Table", time.time())).pack(side=tk.LEFT, padx=5, pady=5)
-tk.Button(frame_controls, text="Nouveau point", command=start_new_point).pack(side=tk.LEFT, padx=5, pady=5)
 
-ble_thread = threading.Thread(target=run_ble_client)
-ble_thread.daemon = True
-ble_thread.start()
+    #######################
+    # Configuration générale
+    #######################
 
-root.mainloop()
+    if sys.platform.startswith('win'):
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+    sensors_config = {
+        "D4:22:CD:00:A0:FD": {"name": "Table", "type": "table"},
+        "D4:22:CD:00:9B:E6": {"name": "Raquette A", "type": "raquette"},
+        "D4:22:CD:00:9E:2F": {"name": "Raquette B", "type": "raquette"}
+    }
+
+    measurement_characteristic_uuid = "15172001-4947-11e9-8646-d663bd873d93"
+    complete_quat_characteristic_uuid = "15172003-4947-11e9-8646-d663bd873d93"
+
+    payload_modes = {
+        "Complete Quaternion": [3, b"\x03"]
+    }
+
+    pygame.mixer.init()
+    sound = pygame.mixer.Sound(os.path.join("sons","rebond_beep-07a.wav"))
+    sequence = ""
+
+    root = tk.Tk()
+    root.title("Interface Tennis de Table")
+
+    playerA_sets = tk.IntVar(value=0)
+    playerB_sets = tk.IntVar(value=0)
+    playerA_points = tk.IntVar(value=0)
+    playerB_points = tk.IntVar(value=0)
+    server_var = tk.StringVar(value="A")
+    threshold = 0.40
+    threshold_var = tk.DoubleVar(value=threshold)
+
+    last_bounces = deque(maxlen=10)
+
+    #frame_top = tk.Frame(root)
+    #frame_top.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+    frame_main = tk.Frame(root)
+    frame_main.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+    frame_videos = tk.Frame(frame_main)
+    frame_videos.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+
+    frame_graph = tk.Frame(frame_main)
+    frame_graph.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
+
+    # On configure les colonnes pour qu’elles s’ajustent
+    frame_main.grid_columnconfigure(0, weight=1)  # vidéos prend de la place
+    frame_main.grid_columnconfigure(1, weight=1)  # graph prend de la place
+    frame_main.grid_rowconfigure(0, weight=1)
+
+    frame_score = tk.Frame(root)
+    frame_score.pack(side=tk.BOTTOM, fill=tk.X)
+
+    frame_bounces = tk.Frame(frame_score)
+    frame_bounces.pack(side=tk.LEFT, padx=10)
+
+    frame_scoreboard = tk.Frame(frame_score)
+    frame_scoreboard.pack(side=tk.LEFT, padx=10)
+
+    frame_server = tk.Frame(frame_score)
+    frame_server.pack(side=tk.LEFT, padx=10)
+
+    frame_controls = tk.Frame(root)
+    frame_controls.pack(side=tk.BOTTOM, fill=tk.X)
+
+    label_cam1 = tk.Label(frame_videos)
+    label_cam1.pack(side=tk.LEFT, padx=5, pady=5)
+
+    label_cam2 = tk.Label(frame_videos)
+    label_cam2.pack(side=tk.LEFT, padx=5, pady=5)
+
+    cam1_index = config.USER_PREFERENCE["camera"]["num_camera1"]
+    cam2_index = config.USER_PREFERENCE["camera"]["num_camera2"]
+
+    bounces_label = tk.Label(frame_bounces, text="Derniers rebonds détectés:")
+    bounces_label.pack(side=tk.TOP)
+    bounces_list = tk.Listbox(frame_bounces, height=10, width=40)
+    bounces_list.pack(side=tk.TOP)
+
+    tk.Label(frame_scoreboard, text="Joueur A").grid(row=0, column=1, padx=5)
+    tk.Label(frame_scoreboard, text="Joueur B").grid(row=0, column=3, padx=5)
+
+    tk.Label(frame_scoreboard, text="Sets:").grid(row=1, column=0)
+    label_A_sets = tk.Label(frame_scoreboard, textvariable=playerA_sets)
+    label_A_sets.grid(row=1, column=1)
+    tk.Button(frame_scoreboard, text="+", command=lambda: playerA_sets.set(playerA_sets.get()+1)).grid(row=1, column=2)
+    tk.Button(frame_scoreboard, text="-", command=lambda: playerA_sets.set(max(0,playerA_sets.get()-1))).grid(row=1, column=4)
+
+    label_B_sets = tk.Label(frame_scoreboard, textvariable=playerB_sets)
+    label_B_sets.grid(row=1, column=3)
+    tk.Button(frame_scoreboard, text="+", command=lambda: playerB_sets.set(playerB_sets.get()+1)).grid(row=1, column=5)
+    tk.Button(frame_scoreboard, text="-", command=lambda: playerB_sets.set(max(0,playerB_sets.get()-1))).grid(row=1, column=6)
+
+    tk.Label(frame_scoreboard, text="Points:").grid(row=2, column=0)
+    label_A_points = tk.Label(frame_scoreboard, textvariable=playerA_points)
+    label_A_points.grid(row=2, column=1)
+    tk.Button(frame_scoreboard, text="+", command=lambda: playerA_points.set(playerA_points.get()+1)).grid(row=2, column=2)
+    tk.Button(frame_scoreboard, text="-", command=lambda: playerA_points.set(max(0,playerA_points.get()-1))).grid(row=2, column=4)
+
+    label_B_points = tk.Label(frame_scoreboard, textvariable=playerB_points)
+    label_B_points.grid(row=2, column=3)
+    tk.Button(frame_scoreboard, text="+", command=lambda: playerB_points.set(playerB_points.get()+1)).grid(row=2, column=5)
+    tk.Button(frame_scoreboard, text="-", command=lambda: playerB_points.set(max(0,playerB_points.get()-1))).grid(row=2, column=6)
+
+    tk.Label(frame_server, text="Serveur actuel:").pack(side=tk.LEFT)
+    label_server = tk.Label(frame_server, textvariable=server_var, fg="red")
+    label_server.pack(side=tk.LEFT, padx=5)
+    tk.Button(frame_server, text="↔", command=lambda: server_var.set("A" if server_var.get()=="B" else "B")).pack(side=tk.LEFT, padx=5)
+
+    threshold_label = tk.Label(frame_controls, text="Seuil de détection (g/s) :")
+    threshold_label.pack(side=tk.LEFT, padx=5, pady=5)
+    threshold_entry = tk.Entry(frame_controls, textvariable=threshold_var, width=5)
+    threshold_entry.pack(side=tk.LEFT, padx=5, pady=5)
+
+    threshold_var.trace_add("write", update_threshold)
+
+    delta_t = 0.05
+    min_interval = 0.5
+    faire_yolo = False
+    data_lock = threading.Lock()
+
+    for addr in sensors_config.keys():
+        sensors_config[addr].update({
+            "times": [],
+            "xs": [], "ys": [], "zs": [],
+            "quat_w": [], "quat_x": [], "quat_y": [], "quat_z": [],
+            "deriv_x": [], "deriv_y": [], "deriv_z": [],
+            "last_bounce_time": 0,
+            "window_size": 5,
+            "acc_x_filtered_prev": 0,
+            "acc_y_filtered_prev": 0,
+            "acc_z_filtered_prev": 0
+        })
+
+    lowcut = 20.0
+    highcut = 25.0
+    order = 4
+    fs = 100.0
+
+    sos = butter_bandpass(lowcut, highcut, fs, order)
+
+    ###############################
+    # AJOUT AUTOMATE
+    ###############################
+    STATE_WAIT_SERVE_RACKET = 0
+    STATE_WAIT_FIRST_TABLE = 1
+    STATE_WAIT_SECOND_TABLE = 2
+    STATE_WAIT_OTHER_RACKET = 3
+    STATE_WAIT_TABLE = 4
+
+    current_server = "Raquette A"  # vous pouvez changer dynamiquement selon server_var
+    current_state = STATE_WAIT_SERVE_RACKET
+    last_racket = None
+
+    # Variables globales
+    events = []
+    last_event_time = None
+    point_timeout_ms = 3000  # 5 secondes
+    point_ended = False  # Pour savoir si le point est terminé
+    initial_server_set = None
+
+
+
+    # Variables globales pour gérer le temps de début et de fin du point
+    start_of_point_time = None
+    end_of_point_time = None
+
+
+    arr = calculer_liste_webcams_dispo()
+
+    if not arr:
+        print("no camera detected", arr)
+        exit()
+
+
+    cap1 = try_open_camera(cam1_index)
+    cap2 = try_open_camera(cam2_index)
+
+    frame1 = []
+    frame2 = []
+    results1 = []
+    results2 = []
+
+    appliquer_pose_estimation(np.zeros((100,100,3), dtype=np.uint8))
+
+
+
+    root.protocol("WM_DELETE_WINDOW", on_closing)
+
+    update_video_frames()
+
+    show_graph_var = tk.BooleanVar(value=False)
+    #faire_yolo2 = tk.BooleanVar(value=False)
+
+    frame_graph_options = tk.Frame(root)
+    frame_graph_options.pack(side=tk.BOTTOM, fill=tk.X)
+    checkbutton1 = tk.Checkbutton(frame_graph_options, text="Afficher accélérations (10s)", variable=show_graph_var, command=lambda: toggle_graph()).pack(side=tk.LEFT, padx=5, pady=5)
+    checkbutton2 = tk.Checkbutton(frame_graph_options, text="Faire Yolo", command=lambda: faire_yolo_modif_value()).pack(side=tk.LEFT, padx=5, pady=5)
+
+
+    fig = Figure(figsize=(6,4))
+    ax_table = fig.add_subplot(3,1,1)
+    ax_raqA = fig.add_subplot(3,1,2)
+    ax_raqB = fig.add_subplot(3,1,3)
+
+    canvas_graph = FigureCanvasTkAgg(fig, master=frame_graph)
+
+    ani = None
+
+    cam1_var = tk.IntVar(value=cam1_index)
+    cam2_var = tk.IntVar(value=cam2_index)
+
+    cam1_menu = tk.OptionMenu(frame_controls, cam1_var, *arr)
+    cam1_menu.pack(side=tk.LEFT, padx=5, pady=5)
+    cam2_menu = tk.OptionMenu(frame_controls, cam2_var, *arr)
+    cam2_menu.pack(side=tk.LEFT, padx=5, pady=5)
+
+    cam1_var.trace_add("write", update_selected_cameras)
+    cam2_var.trace_add("write", update_selected_cameras)
+
+    tk.Button(frame_scoreboard, text="+", command=give_point_to_A).grid(row=2, column=2)
+    tk.Button(frame_scoreboard, text="-", command=remove_point_from_player_A).grid(row=2, column=4)
+    tk.Button(frame_scoreboard, text="+", command=give_point_to_B).grid(row=2, column=5)
+    tk.Button(frame_scoreboard, text="-", command=remove_point_from_player_B).grid(row=2, column=6)
+    tk.Button(frame_controls, text="Rebond Table", command=lambda: add_bounce_event("Table", time.time())).pack(side=tk.LEFT, padx=5, pady=5)
+    tk.Button(frame_controls, text="Nouveau point", command=start_new_point).pack(side=tk.LEFT, padx=5, pady=5)
+
+    ble_thread = threading.Thread(target=run_ble_client)
+    ble_thread.daemon = True
+    ble_thread.start()
+
+    root.mainloop()

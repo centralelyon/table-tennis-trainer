@@ -13,7 +13,7 @@ from sklearn.cluster import KMeans
 from ultralytics import YOLO
 
 # Charger le modèle YOLOv8 pré-entraîné pour l'estimation de pose
-model = YOLO('yolov8n-pose.pt')
+model = YOLO(os.path.join('models','yolov8n-pose.pt'))
 
 
 #import config

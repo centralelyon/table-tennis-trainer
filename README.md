@@ -12,7 +12,7 @@
 ## Use
 Interface Script : [main.py](https://github.com/centralelyon/table-tennis-trainer/blob/main/main.py)
 
-[interface_fds.py](https://github.com/centralelyon/table-tennis-trainer/blob/main/interface_fds.py): interface of "fête de la science"
+[interface_fds.py](https://github.com/centralelyon/table-tennis-trainer/blob/main/interface_fds.py): "fête de la science" interface
 
 [fonctions_de_detection.py](https://github.com/centralelyon/table-tennis-trainer/blob/main/fonctions_de_detection.py) is the set of functions to be imported for event detection methods.
 

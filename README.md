@@ -1,19 +1,20 @@
 # table-tennis-trainer
 
-## Installation:
-- Installer [yolov8](https://docs.ultralytics.com/models/yolov8/)
+## Install:
+- Install [yolov8](https://docs.ultralytics.com/models/yolov8/)
+- `pip install -r requirements.txt`
 
 ## Configuration
-- Télécharger [config_ini](https://github.com/centralelyon/table-tennis-trainer/blob/main/config_ini.py)
-- Renomer `config_ini.py` en `config.py`
-- Modifier les valeurs de `config.py`
+- Download [config_ini](https://github.com/centralelyon/table-tennis-trainer/blob/main/config_ini.py)
+- Rename `config_ini.py` to `config.py`
+- Modify the values of `config.py`
 
-## Utilisation
-Script de l'interface finale (en cours) : [interface_tt.py](https://github.com/centralelyon/table-tennis-trainer/blob/main/interface_tt.py)
+## Use
+Interface Script : [main.py](https://github.com/centralelyon/table-tennis-trainer/blob/main/main.py)
 
-interface_fds.py est l'interface du programme de la fête de la science
+[interface_fds.py](https://github.com/centralelyon/table-tennis-trainer/blob/main/interface_fds.py): "fête de la science" interface
 
-fonctions_de_detection.py est l'ensemble des fonctions à importer pour avoir les méthodes de détection d'événements.
+[fonctions_de_detection.py](https://github.com/centralelyon/table-tennis-trainer/blob/main/fonctions_de_detection.py) is the set of functions to be imported for event detection methods.
 
 
 ## Install (macos)
